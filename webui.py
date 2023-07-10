@@ -75,7 +75,7 @@ startup_timer.record("other imports")
 if cmd_opts.server_name:
     server_name = cmd_opts.server_name
 else:
-    server_name = "0.0.0.0" if cmd_opts.listen else None
+    server_name = "0.0.0.0" #if cmd_opts.listen else None
 
 
 def fix_asyncio_event_loop_policy():

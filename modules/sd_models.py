@@ -18,6 +18,7 @@ from modules import paths, shared, modelloader, devices, script_callbacks, sd_va
 from modules.sd_hijack_inpainting import do_inpainting_hijack
 from modules.timer import Timer
 import tomesd
+import copy
 
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
@@ -25,6 +26,7 @@ model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 checkpoints_list = {}
 checkpoint_alisases = {}
 checkpoints_loaded = collections.OrderedDict()
+models_loaded = collections.OrderedDict()
 
 
 class CheckpointInfo:
@@ -522,22 +524,37 @@ def reload_model_weights(sd_model=None, info=None):
 
     if not sd_model:
         sd_model = model_data.sd_model
-
+    
+    timer = Timer()
     if sd_model is None:  # previous model load failed
         current_checkpoint_info = None
     else:
         current_checkpoint_info = sd_model.sd_checkpoint_info
         if sd_model.sd_model_checkpoint == checkpoint_info.filename:
             return
+        for filename, model in models_loaded.items():
+            if checkpoint_info.filename == filename:
+                print(f"需要文件{checkpoint_info.filename}, 缓存文件：{filename}")
+                print('using model cached in device')
+                timer.record('using model cached in device')
+                sd_hijack.model_hijack.undo_hijack(sd_model)
+                models_loaded[sd_model.sd_model_checkpoint] = sd_model
+                model_data.sd_model = None
+
+                sd_hijack.model_hijack.hijack(model)
+                script_callbacks.model_loaded_callback(model)
+                model_data.sd_model = model
+                return 
 
         sd_unet.apply_unet("None")
 
         if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
             lowvram.send_everything_to_cpu()
-        else:
-            sd_model.to(devices.cpu)
+        # else:
+        #     sd_model.to(devices.cpu)
 
-        sd_hijack.model_hijack.undo_hijack(sd_model)
+        
+    print(f"Weights loaded in {timer.summary()}.")
 
     timer = Timer()
 
@@ -547,28 +564,42 @@ def reload_model_weights(sd_model=None, info=None):
 
     timer.record("find config")
 
+    if len(models_loaded) >= 4: # todo: maoxianren
+        tmp = models_loaded.popitem(last=False) 
+        tmp[1].to(devices.cpu)
+        print('删除文件')
+        del tmp 
+
+    sd_hijack.model_hijack.undo_hijack(sd_model)
+    models_loaded[sd_model.sd_model_checkpoint] = sd_model
+    model_data.sd_model = None
+
     if sd_model is None or checkpoint_config != sd_model.used_config:
-        del sd_model
+        # del sd_model  
+        model_data.sd_model = None
         load_model(checkpoint_info, already_loaded_state_dict=state_dict)
+        if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
+            models_loaded[checkpoint_info.filename] = model_data.sd_model     
         return model_data.sd_model
 
-    try:
-        load_model_weights(sd_model, checkpoint_info, state_dict, timer)
-    except Exception:
-        print("Failed to load checkpoint, restoring previous")
-        load_model_weights(sd_model, current_checkpoint_info, None, timer)
-        raise
-    finally:
-        sd_hijack.model_hijack.hijack(sd_model)
-        timer.record("hijack")
+    sd_model = load_model(checkpoint_info, already_loaded_state_dict=state_dict)
+    # try:
+    #     load_model_weights(sd_model, checkpoint_info, state_dict, timer)
+    # except Exception:
+    #     print("Failed to load checkpoint, restoring previous")
+    #     load_model_weights(sd_model, current_checkpoint_info, None, timer)
+    #     raise
+    # finally:
+    #     sd_hijack.model_hijack.hijack(sd_model)
+    #     timer.record("hijack")
 
-        script_callbacks.model_loaded_callback(sd_model)
-        timer.record("script callbacks")
+    #     script_callbacks.model_loaded_callback(sd_model)
+    #     timer.record("script callbacks")
 
-        if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
-            sd_model.to(devices.device)
-            timer.record("move model to device")
-
+    #     if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
+    #         sd_model.to(devices.device)
+    #         timer.record("move model to device")
+    # print(59)
     print(f"Weights loaded in {timer.summary()}.")
 
     return sd_model
