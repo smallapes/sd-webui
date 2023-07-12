@@ -18,7 +18,8 @@ from modules import paths, shared, modelloader, devices, script_callbacks, sd_va
 from modules.sd_hijack_inpainting import do_inpainting_hijack
 from modules.timer import Timer
 import tomesd
-import copy
+from modules import sd_arc_v2
+
 
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
@@ -27,7 +28,10 @@ checkpoints_list = {}
 checkpoint_alisases = {}
 checkpoints_loaded = collections.OrderedDict()
 models_loaded = collections.OrderedDict()
+arc = sd_arc_v2.ARC(24, 64)
 
+def get_arc():
+    return arc
 
 class CheckpointInfo:
     def __init__(self, filename):
@@ -532,20 +536,24 @@ def reload_model_weights(sd_model=None, info=None):
         current_checkpoint_info = sd_model.sd_checkpoint_info
         if sd_model.sd_model_checkpoint == checkpoint_info.filename:
             return
-        for filename, model in models_loaded.items():
-            if checkpoint_info.filename == filename:
-                print(f"需要文件{checkpoint_info.filename}, 缓存文件：{filename}")
-                print('using model cached in device')
-                timer.record('using model cached in device')
-                sd_hijack.model_hijack.undo_hijack(sd_model)
-                models_loaded[sd_model.sd_model_checkpoint] = sd_model
-                model_data.sd_model = None
+        if arc.get(checkpoint_info.filename) is not None:
+            print('using model cached in device')
+            
+            # cache model.
+            sd_hijack.model_hijack.undo_hijack(sd_model)
+            arc.put(sd_model.sd_model_checkpoint, sd_model)
+            model_data.sd_model = None
+            timer.record('cache model')
 
-                sd_hijack.model_hijack.hijack(model)
-                script_callbacks.model_loaded_callback(model)
-                model_data.sd_model = model
-                return 
+            # get cache model.
+            model = arc.get(checkpoint_info.filename)
+            sd_hijack.model_hijack.hijack(model)
+            script_callbacks.model_loaded_callback(model)
+            model_data.sd_model = model
+            timer.record('load cached model')
 
+            print(f"Weights loaded in {timer.summary()}.")
+            return 
         sd_unet.apply_unet("None")
 
         if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
@@ -564,25 +572,24 @@ def reload_model_weights(sd_model=None, info=None):
 
     timer.record("find config")
 
-    if len(models_loaded) >= 4: # todo: maoxianren
-        tmp = models_loaded.popitem(last=False) 
-        tmp[1].to(devices.cpu)
-        print('删除文件')
-        del tmp 
-
+    # cache model.
     sd_hijack.model_hijack.undo_hijack(sd_model)
-    models_loaded[sd_model.sd_model_checkpoint] = sd_model
+    arc.put(sd_model.sd_model_checkpoint, sd_model)
     model_data.sd_model = None
+    timer.record('cache model')
 
     if sd_model is None or checkpoint_config != sd_model.used_config:
         # del sd_model  
+        print(f"prefix: {timer.summary()}.")
         model_data.sd_model = None
         load_model(checkpoint_info, already_loaded_state_dict=state_dict)
         if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
             models_loaded[checkpoint_info.filename] = model_data.sd_model     
         return model_data.sd_model
 
+    # new model object.
     sd_model = load_model(checkpoint_info, already_loaded_state_dict=state_dict)
+    timer.record('new model')
     # try:
     #     load_model_weights(sd_model, checkpoint_info, state_dict, timer)
     # except Exception:
@@ -599,7 +606,6 @@ def reload_model_weights(sd_model=None, info=None):
     #     if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
     #         sd_model.to(devices.device)
     #         timer.record("move model to device")
-    # print(59)
     print(f"Weights loaded in {timer.summary()}.")
 
     return sd_model
