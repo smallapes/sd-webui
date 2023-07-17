@@ -23,12 +23,8 @@ from modules.textual_inversion.textual_inversion import create_embedding, train_
 from modules.textual_inversion.preprocess import preprocess
 from modules.hypernetworks.hypernetwork import create_hypernetwork, train_hypernetwork
 from PIL import PngImagePlugin,Image
-<<<<<<< HEAD
-from modules.sd_models import checkpoints_list, unload_model_weights, reload_model_weights
 import modules.sd_models as sd_models
-=======
 from modules.sd_models import checkpoints_list, unload_model_weights, reload_model_weights, checkpoint_aliases
->>>>>>> 05d23c78376ce73d3de932c7e7b8871914295675
 from modules.sd_vae import vae_dict
 from modules.sd_models_config import find_checkpoint_config_near_filename
 from modules.realesrgan_model import get_realesrgan_models
