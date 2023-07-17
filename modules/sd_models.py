@@ -23,7 +23,6 @@ from modules import sd_arc
 
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
-
 checkpoints_list = {}
 checkpoint_aliases = {}
 checkpoint_alisases = checkpoint_aliases  # for compatibility with old name
@@ -533,8 +532,8 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     timer.record("scripts callbacks")
 
-    # with devices.autocast(), torch.no_grad():
-        #sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
+    with devices.autocast(), torch.no_grad():
+        sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
 
     timer.record("calculate empty prompt")
 
@@ -605,7 +604,6 @@ def reload_model_weights(sd_model=None, info=None):
     if sd_model is None or checkpoint_config != sd_model.used_config:
         # del sd_model  
         print(f"prefix: {timer.summary()}.")
-        # model_data.sd_model = None
         load_model(checkpoint_info, already_loaded_state_dict=state_dict) 
         return model_data.sd_model
 
