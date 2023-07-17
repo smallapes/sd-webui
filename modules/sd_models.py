@@ -523,7 +523,6 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     sd_model.eval()
     model_data.sd_model = sd_model
-
     model_data.was_loaded_at_least_once = True
 
     sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings(force_reload=True)  # Reload embeddings after model load as they may or may not fit the model
@@ -534,8 +533,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     timer.record("scripts callbacks")
 
-    with devices.autocast(), torch.no_grad():
-        pass
+    # with devices.autocast(), torch.no_grad():
         #sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
 
     timer.record("calculate empty prompt")
