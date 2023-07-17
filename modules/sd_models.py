@@ -583,9 +583,6 @@ def reload_model_weights(sd_model=None, info=None):
         # else:
         #     sd_model.to(devices.cpu)
 
-        
-    print(f"Weights loaded in {timer.summary()}.")
-
     timer = Timer()
 
     state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
