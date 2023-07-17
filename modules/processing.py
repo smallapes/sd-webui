@@ -616,7 +616,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
                 sd_vae.reload_vae_weights()
 
         sd_models.apply_token_merging(p.sd_model, p.get_token_merging_ratio())
-
+        sd_models.arc.release_memory(p)
         res = process_images_inner(p)
 
     finally:

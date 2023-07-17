@@ -18,7 +18,7 @@ from modules import paths, shared, modelloader, devices, script_callbacks, sd_va
 from modules.sd_hijack_inpainting import do_inpainting_hijack
 from modules.timer import Timer
 import tomesd
-from modules import sd_arc_v2
+from modules import sd_arc
 
 
 model_dir = "Stable-diffusion"
@@ -27,11 +27,7 @@ model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 checkpoints_list = {}
 checkpoint_alisases = {}
 checkpoints_loaded = collections.OrderedDict()
-models_loaded = collections.OrderedDict()
-arc = sd_arc_v2.ARC(24, 64)
-
-def get_arc():
-    return arc
+arc = sd_arc.SpecifiedCache(checkpoints_loaded)
 
 class CheckpointInfo:
     def __init__(self, filename):
@@ -295,7 +291,8 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     if shared.opts.sd_checkpoint_cache > 0:
         # cache newly loaded model
-        checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
+        # checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
+        arc.put_checkpoint(checkpoint_info, model.state_dict().copy())
 
     if shared.cmd_opts.opt_channelslast:
         model.to(memory_format=torch.channels_last)
@@ -327,7 +324,8 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     # clean up cache if limit is reached
     while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
-        checkpoints_loaded.popitem(last=False)
+        # checkpoints_loaded.popitem(last=False)
+        arc.pop_checkpoint()
 
     model.sd_model_hash = sd_model_hash
     model.sd_model_checkpoint = checkpoint_info.filename
@@ -502,6 +500,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     sd_model.eval()
     model_data.sd_model = sd_model
+
     model_data.was_loaded_at_least_once = True
 
     sd_hijack.model_hijack.embedding_db.load_textual_inversion_embeddings(force_reload=True)  # Reload embeddings after model load as they may or may not fit the model
@@ -513,7 +512,8 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     timer.record("scripts callbacks")
 
     with devices.autocast(), torch.no_grad():
-        sd_model.cond_stage_model_empty_prompt = sd_model.cond_stage_model([""])
+        # sd_model.cond_stage_model_empty_prompt = sd_model.cond_stage_model([""])
+        pass
 
     timer.record("calculate empty prompt")
 
@@ -541,15 +541,16 @@ def reload_model_weights(sd_model=None, info=None):
             
             # cache model.
             sd_hijack.model_hijack.undo_hijack(sd_model)
-            arc.put(sd_model.sd_model_checkpoint, sd_model)
             model_data.sd_model = None
+            arc.put(sd_model.sd_model_checkpoint, sd_model)
+            sd_model = None
             timer.record('cache model')
 
             # get cache model.
             model = arc.get(checkpoint_info.filename)
             sd_hijack.model_hijack.hijack(model)
-            script_callbacks.model_loaded_callback(model)
             model_data.sd_model = model
+            script_callbacks.model_loaded_callback(model)
             timer.record('load cached model')
 
             print(f"Weights loaded in {timer.summary()}.")
@@ -574,17 +575,17 @@ def reload_model_weights(sd_model=None, info=None):
 
     # cache model.
     sd_hijack.model_hijack.undo_hijack(sd_model)
-    arc.put(sd_model.sd_model_checkpoint, sd_model)
     model_data.sd_model = None
+    arc.put(sd_model.sd_model_checkpoint, sd_model)
+    sd_model = None
     timer.record('cache model')
+    arc.prepare_memory()
 
     if sd_model is None or checkpoint_config != sd_model.used_config:
         # del sd_model  
         print(f"prefix: {timer.summary()}.")
-        model_data.sd_model = None
-        load_model(checkpoint_info, already_loaded_state_dict=state_dict)
-        if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
-            models_loaded[checkpoint_info.filename] = model_data.sd_model     
+        # model_data.sd_model = None
+        load_model(checkpoint_info, already_loaded_state_dict=state_dict) 
         return model_data.sd_model
 
     # new model object.
