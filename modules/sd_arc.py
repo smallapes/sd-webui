@@ -62,7 +62,7 @@ class SpecifiedCache:
         print(f"gpu memory：{gpu_memory_size : .2f} GB, ram:{ram_size : .2f} GB")
 
         self.gpu_memory_size = gpu_memory_size
-        self.model_size = 5.5 if cmd_opts.no_half else 2.3
+        self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 5 if cmd_opts.no_half else 0.2
         self.gpu_lru_size = int((gpu_memory_size - 4) / self.model_size) # 4GB keep.
         self.ram_lru_size = (ram_size - 10 ) // 8
