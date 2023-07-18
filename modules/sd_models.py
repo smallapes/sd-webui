@@ -301,8 +301,10 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     if shared.opts.sd_checkpoint_cache > 0:
         # cache newly loaded model
-        # checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
-        arc.put_checkpoint(checkpoint_info, model.state_dict().copy())
+        if shared.cmd_opts.arc:
+            arc.put_checkpoint(checkpoint_info, model.state_dict().copy())
+        else:
+            checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
 
     if shared.cmd_opts.opt_channelslast:
         model.to(memory_format=torch.channels_last)
@@ -334,8 +336,10 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     # clean up cache if limit is reached
     while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
-        # checkpoints_loaded.popitem(last=False)
-        arc.pop_checkpoint()
+        if shared.cmd_opts.arc:
+            arc.pop_checkpoint()
+        else:
+            checkpoints_loaded.popitem(last=False)
 
     model.sd_model_hash = sd_model_hash
     model.sd_model_checkpoint = checkpoint_info.filename
@@ -543,7 +547,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     return sd_model
 
 
-def reload_model_weights(sd_model=None, info=None):
+def reload_model_weights_arc(sd_model=None, info=None):
     from modules import lowvram, devices, sd_hijack
     checkpoint_info = info or select_checkpoint()
 
@@ -551,10 +555,7 @@ def reload_model_weights(sd_model=None, info=None):
         sd_model = model_data.sd_model
     
     timer = Timer()
-    if sd_model is None:  # previous model load failed
-        current_checkpoint_info = None
-    else:
-        current_checkpoint_info = sd_model.sd_checkpoint_info
+    if sd_model is not None:  # previous model load failed
         if sd_model.sd_model_checkpoint == checkpoint_info.filename:
             return
         if arc.get(checkpoint_info.filename) is not None:
@@ -580,8 +581,51 @@ def reload_model_weights(sd_model=None, info=None):
 
         if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
             lowvram.send_everything_to_cpu()
-        # else:
-        #     sd_model.to(devices.cpu)
+
+    # cache model.
+    sd_hijack.model_hijack.undo_hijack(sd_model)
+    model_data.sd_model = None
+    arc.put(sd_model.sd_model_checkpoint, sd_model)
+    sd_model = None
+    timer.record('cache model')
+    arc.prepare_memory()
+    
+    state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
+    timer.record('load weights')
+
+    # new model object.
+    sd_model = load_model(checkpoint_info, already_loaded_state_dict=state_dict)
+    timer.record('new model')
+    print(f"Weights loaded in {timer.summary()}.")
+
+    return sd_model
+
+
+def reload_model_weights(sd_model=None, info=None):
+    if shared.cmd_opts.arc:
+        return reload_model_weights_arc(sd_model, info)
+
+    from modules import lowvram, devices, sd_hijack
+    checkpoint_info = info or select_checkpoint()
+
+    if not sd_model:
+        sd_model = model_data.sd_model
+
+    if sd_model is None:  # previous model load failed
+        current_checkpoint_info = None
+    else:
+        current_checkpoint_info = sd_model.sd_checkpoint_info
+        if sd_model.sd_model_checkpoint == checkpoint_info.filename:
+            return
+
+        sd_unet.apply_unet("None")
+
+        if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
+            lowvram.send_everything_to_cpu()
+        else:
+            sd_model.to(devices.cpu)
+
+        sd_hijack.model_hijack.undo_hijack(sd_model)
 
     timer = Timer()
 
@@ -591,39 +635,28 @@ def reload_model_weights(sd_model=None, info=None):
 
     timer.record("find config")
 
-    # cache model.
-    sd_hijack.model_hijack.undo_hijack(sd_model)
-    model_data.sd_model = None
-    arc.put(sd_model.sd_model_checkpoint, sd_model)
-    sd_model = None
-    timer.record('cache model')
-    arc.prepare_memory()
-
     if sd_model is None or checkpoint_config != sd_model.used_config:
-        # del sd_model  
-        print(f"prefix: {timer.summary()}.")
-        load_model(checkpoint_info, already_loaded_state_dict=state_dict) 
+        del sd_model
+        load_model(checkpoint_info, already_loaded_state_dict=state_dict)
         return model_data.sd_model
 
-    # new model object.
-    sd_model = load_model(checkpoint_info, already_loaded_state_dict=state_dict)
-    timer.record('new model')
-    # try:
-    #     load_model_weights(sd_model, checkpoint_info, state_dict, timer)
-    # except Exception:
-    #     print("Failed to load checkpoint, restoring previous")
-    #     load_model_weights(sd_model, current_checkpoint_info, None, timer)
-    #     raise
-    # finally:
-    #     sd_hijack.model_hijack.hijack(sd_model)
-    #     timer.record("hijack")
+    try:
+        load_model_weights(sd_model, checkpoint_info, state_dict, timer)
+    except Exception:
+        print("Failed to load checkpoint, restoring previous")
+        load_model_weights(sd_model, current_checkpoint_info, None, timer)
+        raise
+    finally:
+        sd_hijack.model_hijack.hijack(sd_model)
+        timer.record("hijack")
 
-    #     script_callbacks.model_loaded_callback(sd_model)
-    #     timer.record("script callbacks")
+        script_callbacks.model_loaded_callback(sd_model)
+        timer.record("script callbacks")
 
-    #     if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
-    #         sd_model.to(devices.device)
-    #         timer.record("move model to device")
+        if not shared.cmd_opts.lowvram and not shared.cmd_opts.medvram:
+            sd_model.to(devices.device)
+            timer.record("move model to device")
+
     print(f"Weights loaded in {timer.summary()}.")
 
     return sd_model
