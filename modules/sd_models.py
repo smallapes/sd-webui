@@ -583,13 +583,14 @@ def reload_model_weights_arc(sd_model=None, info=None):
             lowvram.send_everything_to_cpu()
 
     # cache model.
-    sd_hijack.model_hijack.undo_hijack(sd_model)
-    model_data.sd_model = None
-    arc.put(sd_model.sd_model_checkpoint, sd_model)
-    sd_model = None
-    timer.record('cache model')
-    arc.prepare_memory()
+    if sd_model is not None:
+        sd_hijack.model_hijack.undo_hijack(sd_model)
+        model_data.sd_model = None
+        arc.put(sd_model.sd_model_checkpoint, sd_model)
+        sd_model = None
+        timer.record('cache model')
     
+    arc.prepare_memory() 
     state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
     timer.record('load weights')
 
