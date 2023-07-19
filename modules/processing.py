@@ -640,7 +640,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         res = process_images_inner(p)
     except RuntimeError as e:
         if 'CUDA out of memory' in str(e):
-            # sd_models.unload_model_weights()
+            sd_models.unload_model_weights()
             torch.cuda.empty_cache()
         raise e
     finally:
