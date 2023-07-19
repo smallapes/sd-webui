@@ -671,6 +671,8 @@ def unload_model_weights(sd_model=None, info=None):
     timer = Timer()
 
     if model_data.sd_model:
+        if shared.cmd_opts.arc:
+            arc.pop(model_data.sd_model.sd_model_checkpoint)
         model_data.sd_model.to(devices.cpu)
         sd_hijack.model_hijack.undo_hijack(model_data.sd_model)
         model_data.sd_model = None

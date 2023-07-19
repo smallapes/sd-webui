@@ -128,6 +128,15 @@ class SpecifiedCache:
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
+    
+    def pop(self, key):
+        if key not in self.lru:
+            return 
+        v = self.lru.pop(key)
+        del v
+        gc.collect()
+        devices.torch_gc()
+        torch.cuda.empty_cache()
 
     def prepare_memory(self):
         if len(self.lru) >= self.k_lru:
