@@ -63,7 +63,8 @@ class SpecifiedCache:
 
         self.gpu_memory_size = gpu_memory_size
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
-        self.size_base = 5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
+        self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
+        self.batch_base = 0.3
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = (ram_size - 10 ) // 8
 
@@ -161,7 +162,7 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
         try:
-            need_size = (p.height * p.width * p.batch_size/(512*512) - 1) * self.size_base # not include model size
+            need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             keep_models_num = int((self.gpu_memory_size - need_size) / self.model_size)
             while len(self.lru) > keep_models_num and len(self.lru) > 0:
                 self.delete_oldest()
