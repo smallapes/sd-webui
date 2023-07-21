@@ -66,11 +66,11 @@ class SpecifiedCache:
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
-        self.ram_lru_size = (ram_size - 10 ) // 8
+        self.ram_lru_size = (ram_size - 4.3 * self.gpu_lru_size ) // 8
 
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
-        self.k_ram = shared.opts.sd_checkpoint_cache # min(self.ram_lru_size, shared.opts.sd_checkpoint_cache)
+        self.k_ram = min(self.ram_lru_size, shared.opts.sd_checkpoint_cache)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
         self.gpu_specified_models = None
         self.ram_specified_models = None
@@ -115,19 +115,20 @@ class SpecifiedCache:
     def delete_oldest(self):
         if len(self.lru) == 0:
             return 
-        cudas = [[k, v] for k, v in self.lru.items() if self.is_cuda(v)] 
-        sorted_cudas = sorted(cudas, key = lambda x: self.reload_time.get(x[0], 0))
+        cudas = [k for k, v in self.lru.items() if self.is_cuda(v)] 
+        sorted_cudas = sorted(cudas, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_cudas[0]
-        print(f"delete cache: {oldest[0]}")
-        v = oldest[1]
-        self.lru.pop(oldest[0])
-        del oldest
         del sorted_cudas
         del cudas
+        print(f"delete cache: {oldest}")
+        v = self.lru.pop(oldest)
+        del oldest
+        # v.to(devices.cpu)
         del v
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
+
     
     def pop(self, key):
         if key not in self.lru:
@@ -180,22 +181,26 @@ class SpecifiedCache:
             raise e
 
     def put_checkpoint(self, checkpoint_info, state_dict):
-        if self.is_ram_specified(checkpoint_info.filename) or len(self.checkpoints_loaded) < self.k_ram:
+        if self.is_ram_specified(checkpoint_info.filename):
+            while len(self.checkpoints_loaded) >= self.k_ram:
+                self.pop_checkpoint()
             self.checkpoints_loaded[checkpoint_info] = state_dict
             print(f"add checkpoint: {checkpoint_info.filename}")
             return
         del state_dict
+        gc.collect()
 
     def pop_checkpoint(self,):
         if len(self.checkpoints_loaded) == 0:
             return
-        ckpts = [[k, v] for k, v in self.checkpoints_loaded.items()] 
-        sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x[0].filename, 0))
+        ckpts = [k for k in self.checkpoints_loaded.keys()] 
+        sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x.filename, 0))
         oldest = sorted_rams[0]
         del ckpts
         del sorted_rams
-        print(f"delete checkpoint: {oldest[0].filename}")
-        self.checkpoints_loaded.pop(oldest[0])    
+        print(f"delete checkpoint: {oldest.filename}")
+        v = self.checkpoints_loaded.pop(oldest)
+        del v   
         del oldest  
         gc.collect()
 
