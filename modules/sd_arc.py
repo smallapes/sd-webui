@@ -70,7 +70,7 @@ class SpecifiedCache:
 
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
-        self.k_ram = min(self.ram_lru_size, shared.opts.sd_checkpoint_cache)
+        self.k_ram = shared.opts.sd_checkpoint_cache # min(self.ram_lru_size, shared.opts.sd_checkpoint_cache)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
         self.gpu_specified_models = None
         self.ram_specified_models = None
@@ -190,12 +190,12 @@ class SpecifiedCache:
         if len(self.checkpoints_loaded) == 0:
             return
         ckpts = [[k, v] for k, v in self.checkpoints_loaded.items()] 
-        sorted_cudas = sorted(ckpts, key = lambda x: self.reload_time.get(x[0].filename, 0))
+        sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x[0].filename, 0))
+        oldest = sorted_rams[0]
         del ckpts
-        del sorted_cudas
-        oldest = sorted_cudas[0]
-        print(f"delete checkpoint: {oldest[0][0].filename}")
-        self.checkpoints_loaded.pop(sorted_cudas[0][0])    
+        del sorted_rams
+        print(f"delete checkpoint: {oldest[0].filename}")
+        self.checkpoints_loaded.pop(oldest[0])    
         del oldest  
         gc.collect()
 
