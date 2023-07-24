@@ -71,7 +71,7 @@ class SpecifiedCache:
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
         rectified_cache = (shared.opts.sd_checkpoint_cache * 5 - 4.3 * self.gpu_lru_size) // 5
-        self.k_ram = min(self.ram_lru_size, rectified_cache) 
+        self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
         self.gpu_specified_models = None
         self.ram_specified_models = None
