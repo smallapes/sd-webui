@@ -76,6 +76,7 @@ class SpecifiedCache:
         self.gpu_specified_models = None
         self.ram_specified_models = None
         self.reload_time = {}
+        self.checkpoint_file = {}
         self.checkpoints_loaded = checkpoints_loaded
     
     def set_specified(self, gpu_filenames: list, ram_filenames: list):
@@ -125,6 +126,8 @@ class SpecifiedCache:
         v = self.lru.pop(oldest)
         del oldest
         # v.to(devices.cpu)
+        if self.checkpoint_file.get(oldest) is not None:
+            self.put_checkpoint(self.checkpoint_file.get(oldest), v.state_dict.copy())
         del v
         gc.collect()
         devices.torch_gc()
@@ -180,6 +183,9 @@ class SpecifiedCache:
             print(f"prepare memory: {need_size:.2f} GB")
         except Exception as e:
             raise e
+
+    def put_checkpoint_info(self, checkpoint_info):
+        self.checkpoint_file[checkpoint_info.file] = checkpoint_info
 
     def put_checkpoint(self, checkpoint_info, state_dict):
         if self.is_ram_specified(checkpoint_info.filename):

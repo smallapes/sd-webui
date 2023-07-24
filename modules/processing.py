@@ -640,7 +640,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         if shared.cmd_opts.arc:
             sd_models.arc.release_memory(p)
         res = process_images_inner(p)
-        logging.info(f"finished")
+        logging.info("finished")
     except RuntimeError as e:
         if 'CUDA out of memory' in str(e):
             sd_models.unload_model_weights()
