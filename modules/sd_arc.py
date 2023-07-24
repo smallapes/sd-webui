@@ -57,20 +57,22 @@ class SpecifiedCache:
     def __init__(self, checkpoints_loaded) -> None:
         sysinfo = get_memory()
         print(f"system info: {sysinfo}")
-        gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('total', 24*1024**3)/1024**3
-        ram_size = sysinfo.get('ram',{}).get('total', 32*1024**3)/1024**3
+        gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
+        ram_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
         print(f"gpu memory：{gpu_memory_size : .2f} GB, ram:{ram_size : .2f} GB")
 
-        self.gpu_memory_size = gpu_memory_size
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
+        self.checkpoint_size = 5
+
+        self.gpu_memory_size = gpu_memory_size
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
-        self.ram_lru_size = (ram_size - 5 * self.gpu_lru_size ) // 5
+        self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
 
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
-        rectified_cache = (shared.opts.sd_checkpoint_cache * 5 - 5 * self.gpu_lru_size) // 5
+        rectified_cache = shared.opts.sd_checkpoint_cache  - self.gpu_lru_size
         self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
         self.gpu_specified_models = None
@@ -79,6 +81,17 @@ class SpecifiedCache:
         self.checkpoint_file = {}
         self.checkpoints_loaded = checkpoints_loaded
     
+    def get_residual_cuda(self):
+        sysinfo = get_memory()
+        gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
+        return gpu_memory_size
+    
+    def get_residual_cuda(self):
+        sysinfo = get_memory()
+        ram_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
+        return ram_size
+    
+
     def set_specified(self, gpu_filenames: list, ram_filenames: list):
         not_exist = []
         for filename in gpu_filenames + ram_filenames:
@@ -145,7 +158,8 @@ class SpecifiedCache:
 
     def prepare_memory(self):
         if len(self.lru) >= self.k_lru:
-            self.delete_oldest()
+            while self.get_residual_cuda() < self.model_size and len(self.lru) > 0:
+                self.delete_oldest()
 
     def put_lru(self, key, value):
         """
@@ -190,6 +204,8 @@ class SpecifiedCache:
     def put_checkpoint(self, checkpoint_info, state_dict):
         if self.is_ram_specified(checkpoint_info.filename):
             while self.k_ram and len(self.checkpoints_loaded) >= self.k_ram:
+                self.pop_checkpoint()
+            while self.get_residual_ram() < self.checkpoint_size and len(self.checkpoints_loaded) > 0:
                 self.pop_checkpoint()
             self.checkpoints_loaded[checkpoint_info] = state_dict
             print(f"add checkpoint: {checkpoint_info.filename}")
