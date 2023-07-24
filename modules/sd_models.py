@@ -338,10 +338,11 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
     timer.record("apply dtype to VAE")
 
     # clean up cache if limit is reached
-    while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
-        if shared.cmd_opts.arc:
+    if shared.cmd_opts.arc:
+        while len(checkpoints_loaded) > arc.k_ram:
             arc.pop_checkpoint()
-        else:
+    else:
+        while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
             checkpoints_loaded.popitem(last=False)
 
     model.sd_model_hash = sd_model_hash
