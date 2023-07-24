@@ -305,7 +305,7 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
     if shared.opts.sd_checkpoint_cache > 0:
         # cache newly loaded model
         if shared.cmd_opts.arc:
-            arc.put_checkpoint(checkpoint_info, model.state_dict().copy())
+            arc.put_checkpoint_info(checkpoint_info)
         else:
             checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
 

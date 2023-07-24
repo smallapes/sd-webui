@@ -124,10 +124,10 @@ class SpecifiedCache:
         del cudas
         print(f"delete cache: {oldest}")
         v = self.lru.pop(oldest)
-        del oldest
-        # v.to(devices.cpu)
+        v.to(devices.cpu)
         if self.checkpoint_file.get(oldest) is not None:
-            self.put_checkpoint(self.checkpoint_file.get(oldest), v.state_dict.copy())
+            self.put_checkpoint(self.checkpoint_file.get(oldest), v.state_dict().copy())
+        del oldest
         del v
         gc.collect()
         devices.torch_gc()
@@ -185,11 +185,11 @@ class SpecifiedCache:
             raise e
 
     def put_checkpoint_info(self, checkpoint_info):
-        self.checkpoint_file[checkpoint_info.file] = checkpoint_info
+        self.checkpoint_file[checkpoint_info.filename] = checkpoint_info
 
     def put_checkpoint(self, checkpoint_info, state_dict):
         if self.is_ram_specified(checkpoint_info.filename):
-            while len(self.checkpoints_loaded) >= self.k_ram:
+            while self.k_ram and len(self.checkpoints_loaded) >= self.k_ram:
                 self.pop_checkpoint()
             self.checkpoints_loaded[checkpoint_info] = state_dict
             print(f"add checkpoint: {checkpoint_info.filename}")
