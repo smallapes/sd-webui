@@ -129,9 +129,9 @@ class SpecifiedCache:
         return key in self.lru
     
     def delete_oldest(self):
-        if len(self.lru) == 0:
-            return 
         cudas = [k for k, v in self.lru.items() if self.is_cuda(v)] 
+        if len(cudas) == 0:
+            return 
         sorted_cudas = sorted(cudas, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_cudas[0]
         del sorted_cudas
