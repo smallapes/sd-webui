@@ -60,14 +60,14 @@ class SpecifiedCache:
         gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
         ram_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
         print(f"gpu memory：{gpu_memory_size : .2f} GB, ram:{ram_size : .2f} GB")
+        self.gpu_memory_size = gpu_memory_size
 
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
         self.checkpoint_size = 5
 
-        self.gpu_memory_size = gpu_memory_size
-        self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
+        self.gpu_lru_size = 2 # int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
 
         self.lru = collections.OrderedDict()
@@ -75,6 +75,7 @@ class SpecifiedCache:
         rectified_cache = shared.opts.sd_checkpoint_cache  - self.gpu_lru_size
         self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
+
         self.gpu_specified_models = None
         self.ram_specified_models = None
         self.reload_time = {}
@@ -86,7 +87,7 @@ class SpecifiedCache:
         gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
         return gpu_memory_size
     
-    def get_residual_cuda(self):
+    def get_residual_ram(self):
         sysinfo = get_memory()
         ram_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
         return ram_size
@@ -158,8 +159,9 @@ class SpecifiedCache:
 
     def prepare_memory(self):
         if len(self.lru) >= self.k_lru:
-            while self.get_residual_cuda() < self.model_size and len(self.lru) > 0:
-                self.delete_oldest()
+            self.delete_oldest()
+        while self.get_residual_cuda() < self.model_size and len(self.lru) > 0:
+            self.delete_oldest()
 
     def put_lru(self, key, value):
         """
@@ -167,7 +169,12 @@ class SpecifiedCache:
         """
         self.prepare_memory()
         print(f"add cache: {key}")
-        self.lru[key] = value    
+        self.lru[key] = value
+        if self.checkpoints_loaded.get(self.checkpoint_file.get(key, '')) is not None:
+            v = self.checkpoints_loaded.pop(self.checkpoint_file.get(key))
+            print(f"delete checkpoint: {self.checkpoint_file.get(key).filename}")
+            del v 
+            gc.collect()
     
     def get_model_name(self, key):
         return os.path.basename(key)
