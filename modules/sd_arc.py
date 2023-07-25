@@ -180,6 +180,10 @@ class SpecifiedCache:
         return os.path.basename(key)
 
     def put(self, key, value): 
+        if not self.is_cuda(value):
+            print(f"not cache, not in cuda: {key}")
+            return 
+
         if self.contains(key):
             return
         
