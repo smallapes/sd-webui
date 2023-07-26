@@ -27,7 +27,7 @@ checkpoints_list = {}
 checkpoint_aliases = {}
 checkpoint_alisases = checkpoint_aliases  # for compatibility with old name
 checkpoints_loaded = collections.OrderedDict()
-arc = sd_arc.SpecifiedCache(checkpoints_loaded)
+arc = sd_arc.SpecifiedCache()
 
 
 class CheckpointInfo:
@@ -304,9 +304,7 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     if shared.opts.sd_checkpoint_cache > 0:
         # cache newly loaded model
-        if shared.cmd_opts.arc:
-            arc.put_checkpoint_info(checkpoint_info)
-        else:
+        if not shared.cmd_opts.arc:
             checkpoints_loaded[checkpoint_info] = model.state_dict().copy()
 
     if shared.cmd_opts.opt_channelslast:
@@ -338,12 +336,8 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
     timer.record("apply dtype to VAE")
 
     # clean up cache if limit is reached
-    if shared.cmd_opts.arc:
-        while len(checkpoints_loaded) > arc.k_ram:
-            arc.pop_checkpoint()
-    else:
-        while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
-            checkpoints_loaded.popitem(last=False)
+    while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
+        checkpoints_loaded.popitem(last=False)
 
     model.sd_model_hash = sd_model_hash
     model.sd_model_checkpoint = checkpoint_info.filename
@@ -596,7 +590,6 @@ def reload_model_weights_arc(sd_model=None, info=None):
     
     arc.prepare_memory() 
     state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
-    timer.record('load weights')
 
     # new model object.
     sd_model = load_model(checkpoint_info, already_loaded_state_dict=state_dict)
