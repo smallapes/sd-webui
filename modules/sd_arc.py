@@ -54,7 +54,7 @@ def get_memory():
 
 
 class SpecifiedCache:
-    def __init__(self, checkpoints_loaded) -> None:
+    def __init__(self) -> None:
         sysinfo = get_memory()
         print(f"system info: {sysinfo}")
         gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
@@ -67,7 +67,7 @@ class SpecifiedCache:
         self.batch_base = 0.3
         self.checkpoint_size = 5
 
-        self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
+        self.gpu_lru_size = 2 # int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
 
         self.lru = collections.OrderedDict()
@@ -80,7 +80,7 @@ class SpecifiedCache:
         self.ram_specified_models = None
         self.reload_time = {}
         self.checkpoint_file = {}
-        self.checkpoints_loaded = checkpoints_loaded
+        self.ram = collections.OrderedDict()
     
     def get_residual_cuda(self):
         sysinfo = get_memory()
@@ -114,12 +114,21 @@ class SpecifiedCache:
         if self.is_cuda(value):
             return value
         return None
+    
+    def ram_get(self, key):
+        value =  self.ram.pop(key)
+        if not self.is_cuda(value):
+            self.put_lru(key, value.to(devices.device))
+            return value
+        return None
 
 
     def get(self, key):
         self.reload(key)
         if self.lru.get(key) is not None:
             return self.lru_get(key)   
+        if self.ram.get(key) is not None:
+            return self.ram_get(key) 
         return None
     
     def is_cuda(self, value):
@@ -138,9 +147,7 @@ class SpecifiedCache:
         del cudas
         print(f"delete cache: {oldest}")
         v = self.lru.pop(oldest)
-        v.to(devices.cpu)
-        if self.checkpoint_file.get(oldest) is not None:
-            self.put_checkpoint(self.checkpoint_file.get(oldest), v.state_dict().copy())
+        self.put_ram(oldest, v.to(devices.cpu))
         del oldest
         del v
         gc.collect()
@@ -170,8 +177,8 @@ class SpecifiedCache:
         self.prepare_memory()
         print(f"add cache: {key}")
         self.lru[key] = value
-        if self.checkpoints_loaded.get(self.checkpoint_file.get(key, '')) is not None:
-            v = self.checkpoints_loaded.pop(self.checkpoint_file.get(key))
+        if self.ram.get(self.checkpoint_file.get(key, '')) is not None:
+            v = self.ram.pop(self.checkpoint_file.get(key))
             print(f"delete checkpoint: {self.checkpoint_file.get(key).filename}")
             del v 
             gc.collect()
@@ -209,37 +216,41 @@ class SpecifiedCache:
         except Exception as e:
             raise e
 
-    def put_checkpoint_info(self, checkpoint_info):
-        self.checkpoint_file[checkpoint_info.filename] = checkpoint_info
-
-    def put_checkpoint(self, checkpoint_info, state_dict):
-        if self.is_ram_specified(checkpoint_info.filename):
-            while self.k_ram and len(self.checkpoints_loaded) >= self.k_ram:
-                self.pop_checkpoint()
-            while self.get_residual_ram() < self.checkpoint_size and len(self.checkpoints_loaded) > 0:
-                self.pop_checkpoint()
-            self.checkpoints_loaded[checkpoint_info] = state_dict
-            print(f"add checkpoint: {checkpoint_info.filename}")
+    def put_ram(self, key, value):
+        if self.is_cuda(value):
+            return 
+        if self.is_ram_specified(key):
+            while self.k_ram and len(self.ram) >= self.k_ram:
+                self.pop_ram()
+            while self.get_residual_ram() < self.checkpoint_size and len(self.ram) > 0:
+                self.pop_ram()
+            self.ram[key] = value
+            print(f"add ram cache: {key}")
             return
-        del state_dict
+        del value
+        del key
         gc.collect()
+        devices.torch_gc()
+        torch.cuda.empty_cache()
         
-    def pop_checkpoint(self,):
-        if len(self.checkpoints_loaded) == 0:
+    def pop_ram(self,):
+        if len(self.ram) == 0:
             return
-        ckpts = [k for k in self.checkpoints_loaded.keys()] 
+        ckpts = [k for k in self.ram.keys()] 
         sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x.filename, 0))
         oldest = sorted_rams[0]
         del ckpts
         del sorted_rams
-        print(f"delete checkpoint: {oldest.filename}")
-        v = self.checkpoints_loaded.pop(oldest)
+        print(f"delete ram cache: {oldest}")
+        v = self.ram.pop(oldest)
         del v   
         del oldest  
         gc.collect()
+        devices.torch_gc()
+        torch.cuda.empty_cache()
 
     def get_cudas(self):
         return [self.get_model_name(i) for i in self.lru.keys()] 
     
     def get_rams(self):
-        return [self.get_model_name(i.filename) for i in self.checkpoints_loaded.keys()]
+        return [self.get_model_name(i) for i in self.ram.keys()]
