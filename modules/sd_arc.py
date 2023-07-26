@@ -65,7 +65,7 @@ class SpecifiedCache:
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
-        self.checkpoint_size = 3
+        self.checkpoint_size = 3.5
 
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
