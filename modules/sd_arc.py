@@ -177,9 +177,9 @@ class SpecifiedCache:
         self.prepare_memory()
         print(f"add cache: {key}")
         self.lru[key] = value
-        if self.ram.get(self.checkpoint_file.get(key, '')) is not None:
-            v = self.ram.pop(self.checkpoint_file.get(key))
-            print(f"delete checkpoint: {self.checkpoint_file.get(key).filename}")
+        if self.ram.get(key) is not None:
+            v = self.ram.pop(key)
+            print(f"delete checkpoint: {key}")
             del v 
             gc.collect()
     
