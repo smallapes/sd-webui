@@ -65,14 +65,14 @@ class SpecifiedCache:
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
-        self.checkpoint_size = 5
+        self.checkpoint_size = 2.5
 
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
 
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
-        rectified_cache = shared.opts.sd_checkpoint_cache  - self.gpu_lru_size
+        rectified_cache = int(shared.opts.sd_checkpoint_cache * 5 / self.checkpoint_size ) - self.gpu_lru_size
         self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
 
@@ -239,7 +239,7 @@ class SpecifiedCache:
         if len(self.ram) == 0:
             return
         ckpts = [k for k in self.ram.keys()] 
-        sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x.filename, 0))
+        sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_rams[0]
         del ckpts
         del sorted_rams
