@@ -65,14 +65,15 @@ class SpecifiedCache:
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
-        self.checkpoint_size = 3.5
+        self.ram_model_size = 5
+        self.cuda_model_ram = 2.5
 
         self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
-        self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
+        self.ram_lru_size = (ram_size - self.gpu_lru_size * self.cuda_model_ram) // self.ram_model_size 
 
         self.lru = collections.OrderedDict()
         self.k_lru = self.gpu_lru_size
-        rectified_cache = int(shared.opts.sd_checkpoint_cache * 5 / self.checkpoint_size ) - self.gpu_lru_size
+        rectified_cache = int((shared.opts.sd_checkpoint_cache * 5 - self.gpu_lru_size * self.cuda_model_ram) / self.ram_model_size ) 
         self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
         print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
 
@@ -224,7 +225,7 @@ class SpecifiedCache:
         if self.is_ram_specified(key):
             while self.k_ram and len(self.ram) >= self.k_ram:
                 self.pop_ram()
-            while self.get_residual_ram() < self.checkpoint_size and len(self.ram) > 0:
+            while self.get_residual_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.pop_ram()
             self.ram[key] = value
             print(f"add ram cache: {key}")
