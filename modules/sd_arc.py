@@ -67,7 +67,7 @@ class SpecifiedCache:
         self.batch_base = 0.3
         self.checkpoint_size = 5
 
-        self.gpu_lru_size = 2 # int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
+        self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
         self.ram_lru_size = ram_size // self.checkpoint_size - self.gpu_lru_size
 
         self.lru = collections.OrderedDict()
