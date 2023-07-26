@@ -182,6 +182,8 @@ class SpecifiedCache:
             print(f"delete checkpoint: {key}")
             del v 
             gc.collect()
+            devices.torch_gc()
+            torch.cuda.empty_cache()
     
     def get_model_name(self, key):
         return os.path.basename(key)
