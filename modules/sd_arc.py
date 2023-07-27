@@ -102,26 +102,31 @@ class SpecifiedCache:
         self.gpu_specified_models = gpu_filenames
         self.ram_specified_models = ram_filenames
         return not_exist
+    
 
     def is_gpu_specified(self, key):
         return self.gpu_specified_models is None or self.get_model_name(key) in self.gpu_specified_models
+    
     
     def is_ram_specified(self, key):
         return self.ram_specified_models is None or self.get_model_name(key) in self.ram_specified_models
 
 
     def lru_pop(self, key):
+        print('using model cached in device')
         value =  self.lru.pop(key)
         if self.is_cuda(value):
             return value
         return None
     
+    
     def ram_pop(self, key):
+        print('using model cached in ram')
         value =  self.ram.pop(key)
         if not self.is_cuda(value):
             return value.to(devices.device)
         return None
-
+    
 
     def pop(self, key):
         self.reload(key)
@@ -213,9 +218,9 @@ class SpecifiedCache:
             return 
         if self.is_ram_specified(key):
             while self.k_ram and len(self.ram) >= self.k_ram:
-                self.pop_ram()
+                self.delete_ram()
             while self.get_residual_ram() < self.ram_model_size and len(self.ram) > 0:
-                self.pop_ram()
+                self.delete_ram()
             self.ram[key] = value
             print(f"add ram cache: {key}")
             return
@@ -225,7 +230,7 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
         
-    def pop_ram(self,):
+    def delete_ram(self,):
         if len(self.ram) == 0:
             return
         ckpts = [k for k in self.ram.keys()] 

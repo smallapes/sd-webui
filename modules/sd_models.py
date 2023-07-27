@@ -556,9 +556,7 @@ def reload_model_weights_arc(sd_model=None, info=None):
     if sd_model is not None:  # previous model load failed
         if sd_model.sd_model_checkpoint == checkpoint_info.filename:
             return
-        if arc.contains(checkpoint_info.filename):
-            print('using model cached in device')
-            
+        if arc.contains(checkpoint_info.filename):         
             # get cache model.
             model = arc.pop(checkpoint_info.filename)
             timer.record('get cached model')
