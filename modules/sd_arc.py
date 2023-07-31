@@ -7,6 +7,8 @@ import torch
 from modules.shared import cmd_opts
 from modules import shared
 from modules import paths
+import pickle
+import logging
 """
 use in three places via a SpecifiedCache model.
 1 reload_model_weights
@@ -15,6 +17,25 @@ use in three places via a SpecifiedCache model.
 """
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
+
+
+def pickle_load(filepath):
+    # Define a custom find_global function
+    def find_global(module, name):
+        # Return a safe replacement object
+        if name == 'MyClass':
+            return None
+        # Return the default lookup function
+        return getattr(module, name)
+
+    # Open the file
+    with open(filepath, 'rb') as f:
+        # Create an Unpickler object and set the find_global function
+        unpickler = pickle.Unpickler(f)
+        unpickler.find_global = find_global
+        # Load the Python object from the file
+        my_obj = unpickler.load()
+        return my_obj
 
 
 def get_memory():
@@ -63,31 +84,36 @@ class SpecifiedCache:
         self.gpu_memory_size = gpu_memory_size
 
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
+        self.model_size_xl = 8.2
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
         self.ram_model_size = 5
         self.cuda_model_ram = 3
+        self.cuda_keep_size = 2
 
-        self.gpu_lru_size = int((gpu_memory_size - 3) / self.model_size) # 3GB keep.
+        self.gpu_lru_size = int((gpu_memory_size - self.cuda_keep_size) / self.model_size)
         self.ram_lru_size = (ram_size - self.gpu_lru_size * self.cuda_model_ram) // self.ram_model_size 
 
         self.lru = collections.OrderedDict()
-        self.k_lru = self.gpu_lru_size
         rectified_cache = int((shared.opts.sd_checkpoint_cache * 5 - self.gpu_lru_size * self.cuda_model_ram) / self.ram_model_size ) 
         self.k_ram = max(min(self.ram_lru_size, rectified_cache), 0)
-        print(f"maximum model in gpu memory：{self.k_lru}，maximum model in ram memory {self.k_ram}")
+        self.k_disk = shared.cmd_opts.disk_cache_num
+        print(f"maximum model in ram memory {self.k_ram}")
 
         self.gpu_specified_models = None
         self.ram_specified_models = None
         self.reload_time = {}
         self.checkpoint_file = {}
         self.ram = collections.OrderedDict()
+        self.disk = collections.OrderedDict()
     
+
     def get_residual_cuda(self):
         sysinfo = get_memory()
         gpu_memory_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
         return gpu_memory_size
     
+
     def get_residual_ram(self):
         sysinfo = get_memory()
         ram_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
@@ -123,6 +149,12 @@ class SpecifiedCache:
     def ram_pop(self, key):
         print('using model cached in ram')
         value =  self.ram.pop(key)
+        # start_time = time.time()
+        # value_file_path = os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
+        # pickle.dump(value, open(value_file_path, 'wb'))
+        # print(f"save cost: {time.time()-start_time}")
+        # value = pickle_load(value_file_path)
+        # print(f"read cost: {time.time()-start_time}")
         if not self.is_cuda(value):
             return value.to(devices.device)
         return None
@@ -136,12 +168,15 @@ class SpecifiedCache:
             return self.ram_pop(key) 
         return None
     
+
     def is_cuda(self, value):
         return 'cuda' in str(value.device)
+
 
     def contains(self, key):
         return (key in self.lru ) or (key in self.ram)
     
+
     def delete_oldest(self):
         cudas = [k for k, v in self.lru.items()] 
         if len(cudas) == 0:
@@ -159,17 +194,34 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
 
-    def prepare_memory(self):
-        if len(self.lru) >= self.k_lru:
+
+    def get_model_size(self, config):
+        model_size = self.model_size_xl
+        if config:
+            config_name = os.path.basename(config)
+            if config_name in ["v2-inference-v.yaml", "v1-inference.yaml"]:
+                model_size = self.model_size
+            elif config_name in ["sd-xl-refiner.yaml", "sd_xl_refiner.yaml"]:
+                model_size = self.model_size_xl
+            else:
+                logging.error(f"unkown config: {config_name}")
+        return model_size
+
+
+    def prepare_memory(self, config):
+        """
+        prepare memory for model.
+        """
+        model_size = self.get_model_size(config)
+        while self.get_residual_cuda() < model_size + self.cuda_keep_size and len(self.lru) > 0:
             self.delete_oldest()
-        while self.get_residual_cuda() < self.model_size and len(self.lru) > 0:
-            self.delete_oldest()
+
 
     def put_lru(self, key, value):
         """
         value must be cuda.
         """
-        self.prepare_memory()
+        self.prepare_memory(value.used_config)
         print(f"add cache: {key}")
         self.lru[key] = value
         if self.ram.get(key) is not None:
@@ -180,8 +232,10 @@ class SpecifiedCache:
             devices.torch_gc()
             torch.cuda.empty_cache()
     
+
     def get_model_name(self, key):
         return os.path.basename(key)
+
 
     def put(self, key, value): 
         if not self.is_cuda(value):
@@ -191,27 +245,37 @@ class SpecifiedCache:
         if self.contains(key):
             return
         
-        if self.is_gpu_specified(key) or len(self.lru) < self.k_lru:
+        if self.is_gpu_specified(key):
             self.put_lru(key, value)
             return 
         print(f"not cache: {key}")
         del value
 
+
     def reload(self, key):
         self.reload_time[key] = time.time_ns()
 
+
     def release_memory(self, p):
+        """
+        prepare cuda memory for controlnet, height*width*batch_size
+        """
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
         try:
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
-            keep_models_num = int((self.gpu_memory_size - need_size) / self.model_size)
-            while len(self.lru) > keep_models_num and len(self.lru) > 0:
+            for item in p.script_args:
+                if "controlnet" in str(type(item)).lower():
+                    if item.enabled:
+                        need_size += 0.7   
+                        logging.info("prepare memory for controlnet")  
+            while self.get_residual_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
             print(f"prepare memory: {need_size:.2f} GB")
         except Exception as e:
             raise e
+
 
     def put_ram(self, key, value):
         if self.is_cuda(value):
@@ -229,7 +293,8 @@ class SpecifiedCache:
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
-        
+
+
     def delete_ram(self,):
         if len(self.ram) == 0:
             return
@@ -246,8 +311,10 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
 
+
     def get_cudas(self):
         return [self.get_model_name(i) for i in self.lru.keys()] 
     
+
     def get_rams(self):
         return [self.get_model_name(i) for i in self.ram.keys()]
