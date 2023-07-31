@@ -495,6 +495,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     print(f"Creating model from config: {checkpoint_config}")
 
+    arc.prepare_memory(checkpoint_config) 
     sd_model = None
     try:
         with sd_disable_initialization.DisableInitialization(disable_clip=clip_is_included_into_sd or shared.cmd_opts.do_not_download_clip):
@@ -589,7 +590,6 @@ def reload_model_weights_arc(sd_model=None, info=None):
         sd_model = None
         timer.record('cache model')
     
-    arc.prepare_memory() 
     state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
 
     # new model object.
