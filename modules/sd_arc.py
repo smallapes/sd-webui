@@ -199,10 +199,10 @@ class SpecifiedCache:
         model_size = self.model_size_xl
         if config:
             config_name = os.path.basename(config)
-            if config_name in ["v2-inference-v.yaml", "v1-inference.yaml"]:
-                model_size = self.model_size
-            elif config_name in ["sd-xl-refiner.yaml", "sd_xl_refiner.yaml"]:
+            if '-xl-' in config_name or '_xl_' in config_name: # ["sd-xl-refiner.yaml", "sd_xl_refiner.yaml"]:
                 model_size = self.model_size_xl
+            elif 'v1' in config_name or  'v2' in config_name: # ["v2-inference-v.yaml", "v1-inference.yaml", "v1-inpainting-inference.yaml"]
+                model_size = self.model_size
             else:
                 logging.error(f"unkown config: {config_name}")
         return model_size
