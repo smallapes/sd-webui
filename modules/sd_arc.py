@@ -268,7 +268,8 @@ class SpecifiedCache:
             for item in p.script_args:
                 if "controlnet" in str(type(item)).lower():
                     if item.enabled:
-                        need_size += 0.7     
+                        need_size += 0.7   
+                        logging.info("prepare memory for controlnet")  
             while self.get_residual_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
             print(f"prepare memory: {need_size:.2f} GB")
