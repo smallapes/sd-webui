@@ -308,7 +308,7 @@ class SpecifiedCache:
         
         # usage = psutil.disk_usage(model_path)
         # free_space_gb = bytes_to_gb(usage.free)
-        free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
+        free_space_gb = shared.cmd_opts.arc_disk_size + self.disk_keep_size - len(self.disk) * self.model_size_disk
         return free_space_gb
 
 
