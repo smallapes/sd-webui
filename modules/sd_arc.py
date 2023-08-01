@@ -10,11 +10,12 @@ from modules import paths
 import pickle
 import logging
 import psutil
-"""
-use in three places via a SpecifiedCache model.
-1 reload_model_weights
-2  
 
+
+"""
+use in two places via a SpecifiedCache model.
+1 sd_models.py
+2 processing.py
 """
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
@@ -311,8 +312,12 @@ class SpecifiedCache:
             logging.info(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
         return free_space_gb
 
+
     def pickle_name(self, key):
+        if not os.path.exsits(os.path.join(model_path, 'pkl')):
+            os.mkdir(os.path.join(model_path, 'pkl'))
         return os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
+    
 
     def pickle_dump(self, key, value):
         start_time = time.time()
