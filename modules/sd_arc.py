@@ -310,11 +310,11 @@ class SpecifiedCache:
         free_space_gb = bytes_to_gb(usage.free)
         if free_space_gb < self.disk_keep_size:
             logging.info(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
-        return free_space_gb
+        return min(free_space_gb, 100)
 
 
     def pickle_name(self, key):
-        if not os.path.exsits(os.path.join(model_path, 'pkl')):
+        if not os.exsits(os.path.join(model_path, 'pkl')):
             os.mkdir(os.path.join(model_path, 'pkl'))
         return os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
     
