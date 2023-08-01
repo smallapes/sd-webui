@@ -95,21 +95,21 @@ class SpecifiedCache:
         self.ram = collections.OrderedDict()
         self.disk = collections.OrderedDict()
 
-        gpu_memory_size = self.get_residual_cuda()
-        ram_size = self.get_residual_ram()
+        gpu_memory_size = self.get_free_cuda()
+        ram_size = self.get_free_ram()
         disk_size = self.get_free_disk()
         logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
         if shared.cmd_opts.arc:
             logging.info("multiple-level cache enabled.")
 
-    def get_residual_cuda(self):
+    def get_free_cuda(self):
         sysinfo = get_memory()
         # used_size = sysinfo.get('cuda',{}).get('system', {}).get('used', 24*1024**3)/1024**3
         free_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
         return free_size # if used_size < 3 else 0 
     
 
-    def get_residual_ram(self):
+    def get_free_ram(self):
         sysinfo = get_memory()
         used_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
         rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - used_size
@@ -214,7 +214,7 @@ class SpecifiedCache:
         prepare memory for model.
         """
         model_size = self.get_model_size(config)
-        while self.get_residual_cuda() < model_size + self.cuda_keep_size and len(self.lru) > 0:
+        while self.get_free_cuda() < model_size + self.cuda_keep_size and len(self.lru) > 0:
             self.delete_oldest()
 
 
@@ -275,7 +275,7 @@ class SpecifiedCache:
                     if item.enabled:
                         need_size += 0.7   
                         logging.info("prepare memory for controlnet")  
-            while self.get_residual_cuda() < need_size and len(self.lru) > 0:
+            while self.get_free_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
@@ -286,7 +286,7 @@ class SpecifiedCache:
         if self.is_cuda(value):
             return 
         if self.is_ram_specified(key):
-            while self.get_residual_ram() < self.ram_model_size and len(self.ram) > 0:
+            while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.delete_ram()
             self.ram[key] = value
             logging.info(f"add ram cache: {key}")
@@ -303,18 +303,17 @@ class SpecifiedCache:
 
 
     def get_free_disk(self):
-        def bytes_to_gb(bytes):
-            return bytes / (1024 ** 3)
+        # def bytes_to_gb(bytes):
+        #     return bytes / (1024 ** 3)
         
-        usage = psutil.disk_usage(model_path)
-        free_space_gb = bytes_to_gb(usage.free)
-        if free_space_gb < self.disk_keep_size:
-            logging.info(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
-        return min(free_space_gb, 100)
+        # usage = psutil.disk_usage(model_path)
+        # free_space_gb = bytes_to_gb(usage.free)
+        free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
+        return free_space_gb
 
 
     def pickle_name(self, key):
-        if not os.exsits(os.path.join(model_path, 'pkl')):
+        if not os.path.exists(os.path.join(model_path, 'pkl')):
             os.mkdir(os.path.join(model_path, 'pkl'))
         return os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
     
