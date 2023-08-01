@@ -10,11 +10,12 @@ from modules import paths
 import pickle
 import logging
 import psutil
-"""
-use in three places via a SpecifiedCache model.
-1 reload_model_weights
-2  
 
+
+"""
+use in two places via a SpecifiedCache model.
+1 sd_models.py
+2 processing.py
 """
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
@@ -97,9 +98,9 @@ class SpecifiedCache:
         gpu_memory_size = self.get_residual_cuda()
         ram_size = self.get_residual_ram()
         disk_size = self.get_free_disk()
-        print(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
+        logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
         if shared.cmd_opts.arc:
-            print("multiple-level cache enabled.")
+            logging.info("multiple-level cache enabled.")
 
     def get_residual_cuda(self):
         sysinfo = get_memory()
@@ -134,7 +135,7 @@ class SpecifiedCache:
 
 
     def lru_pop(self, key):
-        print('using model cached in device')
+        logging.info('using model cached in device')
         value =  self.lru.pop(key)
         if self.is_cuda(value):
             return value
@@ -142,7 +143,7 @@ class SpecifiedCache:
     
     
     def ram_pop(self, key):
-        print('using model cached in ram')
+        logging.info('using model cached in ram')
         value =  self.ram.pop(key)
         if not self.is_cuda(value):
             return value.to(devices.device)
@@ -150,7 +151,7 @@ class SpecifiedCache:
     
 
     def disk_pop(self, key):
-        print('using model cached in disk')
+        logging.info('using model cached in disk')
         value =  self.pickle_load(key)
         if not self.is_cuda(value):
             return value.to(devices.device)
@@ -184,7 +185,7 @@ class SpecifiedCache:
         oldest = sorted_cudas[0]
         del sorted_cudas
         del cudas
-        print(f"delete cache: {oldest}")
+        logging.info(f"delete cache: {oldest}")
         v = self.lru.pop(oldest)
         self.put_ram(oldest, v.to(devices.cpu))
         del oldest
@@ -222,11 +223,11 @@ class SpecifiedCache:
         value must be cuda.
         """
         self.prepare_memory(value.used_config)
-        print(f"add cache: {key}")
+        logging.info(f"add cache: {key}")
         self.lru[key] = value
         if self.ram.get(key) is not None:
             v = self.ram.pop(key)
-            print(f"delete checkpoint: {key}")
+            logging.info(f"delete checkpoint: {key}")
             del v 
             gc.collect()
             devices.torch_gc()
@@ -239,7 +240,7 @@ class SpecifiedCache:
 
     def put(self, key, value): 
         if not self.is_cuda(value):
-            print(f"not cache, not in cuda: {key}")
+            logging.info(f"not cache, not in cuda: {key}")
             return 
 
         if self.contains(key):
@@ -248,7 +249,7 @@ class SpecifiedCache:
         if self.is_gpu_specified(key):
             self.put_lru(key, value)
             return 
-        print(f"not cache: {key}")
+        logging.info(f"not cache: {key}")
         del value
 
 
@@ -267,6 +268,7 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
         try:
+            start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
                 if "controlnet" in str(type(item)).lower():
@@ -275,7 +277,7 @@ class SpecifiedCache:
                         logging.info("prepare memory for controlnet")  
             while self.get_residual_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
-            print(f"prepare memory: {need_size:.2f} GB")
+            logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
@@ -287,7 +289,7 @@ class SpecifiedCache:
             while self.get_residual_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.delete_ram()
             self.ram[key] = value
-            print(f"add ram cache: {key}")
+            logging.info(f"add ram cache: {key}")
             return
         del value
         del key
@@ -307,17 +309,21 @@ class SpecifiedCache:
         usage = psutil.disk_usage(model_path)
         free_space_gb = bytes_to_gb(usage.free)
         if free_space_gb < self.disk_keep_size:
-            print(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
+            logging.info(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
         return free_space_gb
 
+
     def pickle_name(self, key):
+        if not os.path.exsits(os.path.join(model_path, 'pkl')):
+            os.mkdir(os.path.join(model_path, 'pkl'))
         return os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
+    
 
     def pickle_dump(self, key, value):
         start_time = time.time()
         pickle_path = self.pickle_name(key)
         pickle.dump(value, open(pickle_path, 'wb'))
-        print(f"save disk cost: {time.time()-start_time}")
+        logging.info(f"save disk cost: {time.time()-start_time:.2f} s")
         return pickle_path
 
 
@@ -325,7 +331,7 @@ class SpecifiedCache:
         start_time = time.time()
         pickle_path = self.pickle_name(key)
         value = pickle_load(pickle_path)
-        print(f"read disk cost: {time.time()-start_time}")
+        logging.info(f"read disk cost: {time.time()-start_time:.2f} s")
         return value
     
 
@@ -333,33 +339,44 @@ class SpecifiedCache:
         if len(self.disk) == 0:
             return
         ckpts = [k for k in self.disk.keys()] 
-        sorted_rams = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
-        least = sorted_rams[0]
+        sorted_disks = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
+        least = sorted_disks[0]
         del ckpts
-        del sorted_rams
-        print(f"delete disk cache: {least}")
+        del sorted_disks
+        logging.info(f"delete disk cache: {least}")
         v = self.disk.pop(least)
         os.remove(v) 
         del least  
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
+    
+
+    def is_more_disk_frequent(self, key):
+        if len(self.disk) == 0:
+            return True
+        ckpts = [k for k in self.disk.keys()] 
+        sorted_disks = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
+        least = sorted_disks[0]
+        if self.reload_count.get(key, 0) > self.reload_count.get(least, 0):
+            return True
+        return False
 
 
     def put_disk(self, key, value):
-        if self.is_cuda(value):
-            value.to(devices.cpu)
-
-        if (self.get_free_disk() - self.disk_keep_size < 0) or not shared.cmd_opts.arc_disk:
+        while self.get_free_disk() - self.disk_keep_size < self.model_size_disk and len(self.disk) > 0:
+            self.delete_disk()
+    
+        if not (self.get_free_disk() - self.disk_keep_size > self.model_size_disk and self.is_more_disk_frequent(key)):
             del value
             del key
             return
 
         if self.is_disk_specified(key):
-            while self.get_free_disk() - self.disk_keep_size < self.model_size_disk and len(self.disk) > 0:
-                self.delete_disk()
+            if self.is_cuda(value):
+                value.to(devices.cpu)
             self.disk[key] = self.pickle_dump(key, value)
-            print(f"add disk cache: {key}")
+            logging.info(f"add disk cache: {key}")
             return
         del value
         del key
@@ -373,7 +390,7 @@ class SpecifiedCache:
         oldest = sorted_rams[0]
         del ckpts
         del sorted_rams
-        print(f"delete ram cache: {oldest}")
+        logging.info(f"delete ram cache: {oldest}")
         v = self.ram.pop(oldest)
         self.put_disk(oldest, v)
         del v
