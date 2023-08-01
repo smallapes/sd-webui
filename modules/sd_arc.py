@@ -82,9 +82,10 @@ class SpecifiedCache:
         self.batch_base = 0.3
         self.ram_model_size = 5
         self.cuda_model_ram = 3
+
         self.cuda_keep_size = 2
-        self.ram_keep_size = 10
-        self.disk_keep_size = 20
+        self.ram_keep_size = 5
+        self.disk_keep_size = 0
 
         self.gpu_specified_models = None
         self.ram_specified_models = None
@@ -106,19 +107,20 @@ class SpecifiedCache:
     def get_free_cuda(self):
         sysinfo = get_memory()
         free_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
-        return free_size
+        used_size = sysinfo.get('cuda',{}).get('system', {}).get('used', 24*1024**3)/1024**3
+        return free_size if used_size < 3 else 0
     
 
     def get_free_ram(self):
         sysinfo = get_memory()
         used_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
         free_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
-        if shared.cmd_opts.arc_ram_size:
-            return shared.cmd_opts.arc_ram_size - used_size
+        if shared.cmd_opts.system_ram_size:
+            return shared.cmd_opts.system_ram_size - used_size
         if shared.opts.sd_checkpoint_cache:
-            rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - used_size
+            rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - len(self.lru) * self.cuda_model_ram - len(self.ram) * 5
             return rectified_free_size 
-        return free_size
+        return free_size if used_size < 3 else 0
     
 
     def get_free_disk(self):
