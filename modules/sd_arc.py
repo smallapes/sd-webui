@@ -108,7 +108,7 @@ class SpecifiedCache:
         sysinfo = get_memory()
         free_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
         used_size = sysinfo.get('cuda',{}).get('system', {}).get('used', 24*1024**3)/1024**3
-        return free_size if used_size < 3 else 0
+        return free_size # if used_size < 3 else 0
     
 
     def get_free_ram(self):
@@ -119,7 +119,7 @@ class SpecifiedCache:
             return shared.cmd_opts.system_ram_size - used_size
         if shared.opts.sd_checkpoint_cache:
             rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - len(self.lru) * self.cuda_model_ram - len(self.ram) * 5
-            return rectified_free_size if used_size < 3 else 0
+            return rectified_free_size # if used_size < 3 else 0
         return free_size
     
 
