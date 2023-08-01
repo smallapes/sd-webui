@@ -267,6 +267,7 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
         try:
+            start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
                 if "controlnet" in str(type(item)).lower():
@@ -275,7 +276,7 @@ class SpecifiedCache:
                         logging.info("prepare memory for controlnet")  
             while self.get_residual_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
-            logging.info(f"prepare memory: {need_size:.2f} GB")
+            logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
