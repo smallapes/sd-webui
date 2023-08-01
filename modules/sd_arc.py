@@ -314,7 +314,7 @@ class SpecifiedCache:
 
 
     def pickle_name(self, key):
-        if not os.path.exsits(os.path.join(model_path, 'pkl')):
+        if not os.exsits(os.path.join(model_path, 'pkl')):
             os.mkdir(os.path.join(model_path, 'pkl'))
         return os.path.join(model_path, 'pkl', os.path.basename(key)+'.pkl')
     
