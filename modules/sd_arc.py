@@ -83,7 +83,7 @@ class SpecifiedCache:
         self.ram_model_size = 5
         self.cuda_model_ram = 3
         self.cuda_keep_size = 2
-        self.disk_keep_size = 50
+        self.disk_keep_size = 20
 
         self.gpu_specified_models = None
         self.ram_specified_models = None
