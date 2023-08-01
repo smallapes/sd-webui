@@ -356,7 +356,7 @@ class SpecifiedCache:
         if self.is_cuda(value):
             value.to(devices.cpu)
 
-        if (self.get_free_disk() - self.disk_keep_size < 0) or not shared.cmd_opts.arc_disk:
+        if (self.get_free_disk() - self.disk_keep_size < 0):
             del value
             del key
             return
