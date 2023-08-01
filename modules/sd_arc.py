@@ -83,7 +83,8 @@ class SpecifiedCache:
         self.ram_model_size = 5
         self.cuda_model_ram = 3
         self.cuda_keep_size = 2
-        self.disk_keep_size = 50
+        self.ram_keep_size = 10
+        self.disk_keep_size = 20
 
         self.gpu_specified_models = None
         self.ram_specified_models = None
@@ -104,17 +105,31 @@ class SpecifiedCache:
 
     def get_free_cuda(self):
         sysinfo = get_memory()
-        # used_size = sysinfo.get('cuda',{}).get('system', {}).get('used', 24*1024**3)/1024**3
         free_size = sysinfo.get('cuda',{}).get('system', {}).get('free', 24*1024**3)/1024**3
-        return free_size # if used_size < 3 else 0 
+        return free_size
     
 
     def get_free_ram(self):
         sysinfo = get_memory()
         used_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
-        rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - used_size
-        return rectified_free_size # if used_size < 3 else 0
+        free_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
+        if shared.cmd_opts.arc_ram_size:
+            return shared.cmd_opts.arc_ram_size - used_size
+        if shared.opts.sd_checkpoint_cache:
+            rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - used_size
+            return rectified_free_size 
+        return free_size
     
+
+    def get_free_disk(self):
+        # def bytes_to_gb(bytes):
+        #     return bytes / (1024 ** 3)
+        
+        # usage = psutil.disk_usage(model_path)
+        # free_space_gb = bytes_to_gb(usage.free)
+        free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
+        return free_space_gb
+
 
     def set_specified(self, gpu_filenames: list, ram_filenames: list):
         not_exist = []
@@ -300,16 +315,6 @@ class SpecifiedCache:
 
     def is_disk_specified(self, key):
         return self.is_ram_specified(key) or self.is_gpu_specified(key)
-
-
-    def get_free_disk(self):
-        # def bytes_to_gb(bytes):
-        #     return bytes / (1024 ** 3)
-        
-        # usage = psutil.disk_usage(model_path)
-        # free_space_gb = bytes_to_gb(usage.free)
-        free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
-        return free_space_gb
 
 
     def pickle_name(self, key):
