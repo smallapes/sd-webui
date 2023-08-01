@@ -111,4 +111,4 @@ parser.add_argument('--add-stop-route', action='store_true', help='add /_stop ro
 parser.add_argument('--api-server-stop', action='store_true', help='enable server stop/restart/kill via api')
 parser.add_argument('--timeout-keep-alive', type=int, default=30, help='set timeout_keep_alive for uvicorn')
 parser.add_argument("--arc", action='store_true', help="enable to control memory and gpu memory controal by arc")
-parser.add_argument("--disk-cache-num", type=int, help="model num cache in disk", default=0)
+parser.add_argument("--arc-disk", action='store_true', help="cache in memory or not")
