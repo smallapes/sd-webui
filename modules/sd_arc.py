@@ -166,10 +166,13 @@ class SpecifiedCache:
     
 
     def disk_pop(self, key):
-        logging.info('using model cached in disk')
-        value =  self.pickle_load(key)
-        if not self.is_cuda(value):
-            return value.to(devices.device)
+        try:
+            logging.info('using model cached in disk')
+            value =  self.pickle_load(key)
+            if not self.is_cuda(value):
+                return value.to(devices.device)
+        except Exception as e:
+            logging.info(str(e))
         return None
 
 
