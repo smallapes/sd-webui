@@ -310,7 +310,7 @@ class SpecifiedCache:
         free_space_gb = bytes_to_gb(usage.free)
         if free_space_gb < self.disk_keep_size:
             logging.info(f"free_disk: {free_space_gb} GB, less than：{self.disk_keep_size} GB")
-        return free_space_gb
+        return min(free_space_gb, 100)
 
 
     def pickle_name(self, key):
