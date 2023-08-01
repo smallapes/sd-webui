@@ -339,10 +339,10 @@ class SpecifiedCache:
         if len(self.disk) == 0:
             return
         ckpts = [k for k in self.disk.keys()] 
-        sorted_rams = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
-        least = sorted_rams[0]
+        sorted_disks = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
+        least = sorted_disks[0]
         del ckpts
-        del sorted_rams
+        del sorted_disks
         logging.info(f"delete disk cache: {least}")
         v = self.disk.pop(least)
         os.remove(v) 
@@ -350,20 +350,31 @@ class SpecifiedCache:
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
+    
+
+    def is_more_disk_frequent(self, key):
+        if len(self.disk) == 0:
+            return True
+        ckpts = [k for k in self.disk.keys()] 
+        sorted_disks = sorted(ckpts, key = lambda x: self.reload_count.get(x, 0))
+        least = sorted_disks[0]
+        if self.reload_count.get(key, 0) > self.reload_count.get(least, 0):
+            return True
+        return False
 
 
     def put_disk(self, key, value):
-        if self.is_cuda(value):
-            value.to(devices.cpu)
-
-        if (self.get_free_disk() - self.disk_keep_size < 0):
+        while self.get_free_disk() - self.disk_keep_size < self.model_size_disk and len(self.disk) > 0:
+            self.delete_disk()
+    
+        if not (self.get_free_disk() - self.disk_keep_size > self.model_size_disk and self.is_more_disk_frequent(key)):
             del value
             del key
             return
 
         if self.is_disk_specified(key):
-            while self.get_free_disk() - self.disk_keep_size < self.model_size_disk and len(self.disk) > 0:
-                self.delete_disk()
+            if self.is_cuda(value):
+                value.to(devices.cpu)
             self.disk[key] = self.pickle_dump(key, value)
             logging.info(f"add disk cache: {key}")
             return
