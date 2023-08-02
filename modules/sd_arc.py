@@ -295,7 +295,8 @@ class SpecifiedCache:
             for item in p.script_args:
                 print(type(item), "controlnet" in str(type(item)).lower())
                 if "controlnet" in str(type(item)).lower():
-                    print(item.enabled, type(item) == dict, item.get("model") is not None)
+                    print(item.enabled)
+                    print(item.model)
                     if item.enabled or (type(item) == dict and item.get("model") is not None):
                         need_size += 0.7   
                         logging.info("prepare memory for controlnet")  
