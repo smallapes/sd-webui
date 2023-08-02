@@ -294,6 +294,8 @@ class SpecifiedCache:
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
                 print(type(item), "controlnet" in str(type(item)).lower())
+                if type(item) == dict:
+                    print(item.keys())
                 if "controlnet" in str(type(item)).lower():
                     print(item.enabled)
                     print(item.model)
