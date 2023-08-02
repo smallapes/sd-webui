@@ -339,10 +339,12 @@ class SpecifiedCache:
 
 
     def pickle_load(self, key):
+        shared.cmd_args.disable_safe_unpickle = False
         start_time = time.time()
         pickle_path = self.pickle_name(key)
         value = pickle_load(pickle_path)
         logging.info(f"read disk cost: {time.time()-start_time:.2f} s")
+        shared.cmd_args.disable_safe_unpickle = True
         return value
     
 
