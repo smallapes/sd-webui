@@ -129,8 +129,10 @@ class SpecifiedCache:
         
         # usage = psutil.disk_usage(model_path)
         # free_space_gb = bytes_to_gb(usage.free)
-        free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
-        return free_space_gb
+        if shared.cmd_opts.arc_disk_size:
+            free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
+            return free_space_gb
+        return 0
 
 
     def set_specified(self, gpu_filenames: list, ram_filenames: list):
@@ -357,8 +359,6 @@ class SpecifiedCache:
         os.remove(v) 
         del least  
         gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
     
 
     def is_more_disk_frequent(self, key):
@@ -401,7 +401,8 @@ class SpecifiedCache:
         del sorted_rams
         logging.info(f"delete ram cache: {oldest}")
         v = self.ram.pop(oldest)
-        self.put_disk(oldest, v)
+        if shared.cmd_opts.arc_disk_size:
+            self.put_disk(oldest, v)
         del v
         del oldest
         gc.collect()
