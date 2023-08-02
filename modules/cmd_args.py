@@ -111,5 +111,5 @@ parser.add_argument('--add-stop-route', action='store_true', help='add /_stop ro
 parser.add_argument('--api-server-stop', action='store_true', help='enable server stop/restart/kill via api')
 parser.add_argument('--timeout-keep-alive', type=int, default=30, help='set timeout_keep_alive for uvicorn')
 parser.add_argument("--arc", action='store_true', help="enable to control memory and gpu memory controal by arc")
-parser.add_argument("--system-ram-size", type=int, help="sytem ram size in GB", default=10)
-parser.add_argument("--arc-disk-size", type=int, help="maxium disk size used to cache model in GB", default=50)
+parser.add_argument("--system-ram-size", type=int, help="sytem ram size in GB", default=5)
+parser.add_argument("--arc-disk-size", type=int, help="maxium disk size used to cache model in GB", default=10)
