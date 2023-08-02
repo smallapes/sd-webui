@@ -333,7 +333,8 @@ class SpecifiedCache:
     def pickle_dump(self, key, value):
         start_time = time.time()
         pickle_path = self.pickle_name(key)
-        pickle.dump(value, open(pickle_path, 'wb'))
+        if not os.path.exists(pickle_path):
+            pickle.dump(value, open(pickle_path, 'wb'))
         logging.info(f"save disk cost: {time.time()-start_time:.2f} s")
         return pickle_path
 
