@@ -293,13 +293,7 @@ class SpecifiedCache:
             start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
-                print(type(item), "controlnet" in str(type(item)).lower())
-                if type(item) == dict:
-                    print(item.keys())
-                if "controlnet" in str(type(item)).lower():
-                    print(item.enabled)
-                    print(item.model)
-                    if item.enabled or (type(item) == dict and item.get("model") is not None):
+                if ("controlnet" in str(type(item)).lower() and item.enabled) or (type(item) == dict and item.get("model") is not None):
                         need_size += 0.7   
                         logging.info("prepare memory for controlnet")  
             while self.get_free_cuda() < need_size and len(self.lru) > 0:
