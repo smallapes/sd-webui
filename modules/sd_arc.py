@@ -293,6 +293,7 @@ class SpecifiedCache:
             start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
+                print(item)
                 if "controlnet" in str(type(item)).lower():
                     if item.enabled:
                         need_size += 0.7   
