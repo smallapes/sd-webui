@@ -76,7 +76,7 @@ def get_memory():
 class SpecifiedCache:
     def __init__(self) -> None:
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
-        self.model_size_xl = 8.2
+        self.model_size_xl = 8.2 if cmd_opts.no_half else 6.5
         self.model_size_disk = 2.2
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
