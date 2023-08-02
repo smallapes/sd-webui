@@ -76,7 +76,7 @@ def get_memory():
 class SpecifiedCache:
     def __init__(self) -> None:
         self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
-        self.model_size_xl = 8.2
+        self.model_size_xl = 8.2 if cmd_opts.no_half else (6.5 if cmd_opts.no_half_vae else 6.5)
         self.model_size_disk = 2.2
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
         self.batch_base = 0.3
@@ -292,7 +292,6 @@ class SpecifiedCache:
         try:
             start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
-            print(p)
             for item in p.script_args:
                 if ("controlnet" in str(type(item)).lower() and item.enabled) or (type(item) == dict and item.get("model") is not None):
                         need_size += 0.7   
