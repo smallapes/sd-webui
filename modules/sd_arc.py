@@ -242,7 +242,8 @@ class SpecifiedCache:
         model_size = self.get_model_size(config)
         is_delete = False
         while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
-           is_delete = is_delete or self.delete_oldest()
+           tmp = self.delete_oldest()
+           is_delete = is_delete or tmp
         if is_delete:
             self.cuda_gc()
 
@@ -300,7 +301,8 @@ class SpecifiedCache:
                         logging.info("prepare memory for controlnet") 
             is_delete = False 
             while self.get_free_cuda() < need_size and len(self.lru) > 0:
-                is_delete = is_delete or self.delete_oldest()
+                tmp = self.delete_oldest()
+                is_delete = is_delete or tmp
             if is_delete:
                 self.cuda_gc()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
@@ -327,8 +329,8 @@ class SpecifiedCache:
         if self.is_ram_specified(key):
             is_delete = False
             while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
-                is_delete = is_delete or self.delete_ram()
-                
+                tmp = self.delete_ram()
+                is_delete = is_delete or tmp
             if is_delete:
                 self.ram_gc()
             if self.get_free_ram() > self.ram_model_size:
