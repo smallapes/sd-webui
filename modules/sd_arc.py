@@ -215,7 +215,7 @@ class SpecifiedCache:
         del cudas
         logging.info(f"delete cache: {oldest}")
         v = self.lru.pop(oldest)
-        self.put_ram(oldest, v.to(devices.cpu))
+        self.put_ram(oldest, v)
         del oldest
         del v
         gc.collect()
