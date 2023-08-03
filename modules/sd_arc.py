@@ -123,6 +123,12 @@ class SpecifiedCache:
         return free_size
     
 
+    def get_system_free_ram(self):
+        sysinfo = get_memory()
+        free_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
+        return free_size
+    
+
     def get_free_disk(self):
         # def bytes_to_gb(bytes):
         #     return bytes / (1024 ** 3)
@@ -236,7 +242,7 @@ class SpecifiedCache:
         prepare memory for model.
         """
         model_size = self.get_model_size(config)
-        while self.get_free_cuda() < model_size + self.cuda_keep_size and len(self.lru) > 0:
+        while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
             self.delete_oldest()
 
 
@@ -262,8 +268,7 @@ class SpecifiedCache:
 
     def put(self, key, value): 
         if not self.is_cuda(value):
-            logging.info(f"not cache, not in cuda: {key}")
-            return 
+            value.to(devices.cpu)
 
         if self.contains(key):
             return
