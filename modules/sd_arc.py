@@ -123,6 +123,12 @@ class SpecifiedCache:
         return free_size
     
 
+    def get_system_free_ram(self):
+        sysinfo = get_memory()
+        free_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
+        return free_size
+    
+
     def get_free_disk(self):
         # def bytes_to_gb(bytes):
         #     return bytes / (1024 ** 3)
@@ -233,10 +239,10 @@ class SpecifiedCache:
 
     def prepare_memory(self, config):
         """
-        prepare memory for model.
+        prepare cuda and ram memory for model.
         """
         model_size = self.get_model_size(config)
-        while self.get_free_cuda() < model_size + self.cuda_keep_size and len(self.lru) > 0:
+        while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
             self.delete_oldest()
 
 
@@ -262,8 +268,7 @@ class SpecifiedCache:
 
     def put(self, key, value): 
         if not self.is_cuda(value):
-            logging.info(f"not cache, not in cuda: {key}")
-            return 
+            value.to(devices.cpu)
 
         if self.contains(key):
             return
@@ -304,14 +309,15 @@ class SpecifiedCache:
 
 
     def put_ram(self, key, value):
-        if self.is_cuda(value):
-            return 
         if self.is_ram_specified(key):
             while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.delete_ram()
-            self.ram[key] = value
-            logging.info(f"add ram cache: {key}")
-            return
+            if self.get_free_ram() > self.ram_model_size:
+                if self.is_cuda(value):
+                    value.to(devices.cpu)
+                self.ram[key] = value
+                logging.info(f"add ram cache: {key}")
+                return
         del value
         del key
         gc.collect()
@@ -340,12 +346,14 @@ class SpecifiedCache:
 
     def pickle_load(self, key):
         tmp = shared.cmd_args.disable_safe_unpickle
-        shared.cmd_args.disable_safe_unpickle = True
-        start_time = time.time()
-        pickle_path = self.pickle_name(key)
-        value = pickle_load(pickle_path)
-        logging.info(f"read disk cost: {time.time()-start_time:.2f} s")
-        shared.cmd_args.disable_safe_unpickle = tmp
+        try:
+            shared.cmd_args.disable_safe_unpickle = True
+            start_time = time.time()
+            pickle_path = self.pickle_name(key)
+            value = pickle_load(pickle_path)
+            logging.info(f"read disk cost: {time.time()-start_time:.2f} s")
+        finally:
+            shared.cmd_args.disable_safe_unpickle = tmp
         return value
     
 

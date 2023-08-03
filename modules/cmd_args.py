@@ -110,6 +110,6 @@ parser.add_argument('--subpath', type=str, help='customize the subpath for gradi
 parser.add_argument('--add-stop-route', action='store_true', help='add /_stop route to stop server')
 parser.add_argument('--api-server-stop', action='store_true', help='enable server stop/restart/kill via api')
 parser.add_argument('--timeout-keep-alive', type=int, default=30, help='set timeout_keep_alive for uvicorn')
-parser.add_argument("--arc", action='store_true', help="enable to control memory and gpu memory controal by arc")
+parser.add_argument("--arc", action='store_true', help="enable to control memory and gpu memory controal by arc", default=True)
 parser.add_argument("--system-ram-size", type=int, help="sytem ram size in GB", default=None)
 parser.add_argument("--arc-disk-size", type=int, help="maxium disk size used to cache model in GB", default=None)
