@@ -218,9 +218,6 @@ class SpecifiedCache:
         self.put_ram(oldest, v)
         del oldest
         del v
-        gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
 
 
     def get_model_size(self, config):
@@ -242,8 +239,12 @@ class SpecifiedCache:
         prepare cuda and ram memory for model.
         """
         model_size = self.get_model_size(config)
+        is_delete = False
         while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
             self.delete_oldest()
+            is_delete = True
+        if is_delete:
+            self.gc()
 
 
     def put_lru(self, key, value):
@@ -255,11 +256,9 @@ class SpecifiedCache:
         self.lru[key] = value
         if self.ram.get(key) is not None:
             v = self.ram.pop(key)
-            logging.info(f"delete checkpoint: {key}")
+            logging.info(f"checkpoint should not exists: {key}")
             del v 
             gc.collect()
-            devices.torch_gc()
-            torch.cuda.empty_cache()
     
 
     def get_model_name(self, key):
@@ -292,27 +291,41 @@ class SpecifiedCache:
         """
         prepare cuda memory for controlnet, height*width*batch_size
         """
-        gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
         try:
             start_time = time.time()
             need_size = (p.height * p.width /(512*512) - 1) * (self.size_base + self.batch_base) + 4 # not include model size
             for item in p.script_args:
                 if ("controlnet" in str(type(item)).lower() and item.enabled) or (type(item) == dict and item.get("model") is not None):
                         need_size += 0.7   
-                        logging.info("prepare memory for controlnet")  
+                        logging.info("prepare memory for controlnet") 
+            release = False 
             while self.get_free_cuda() < need_size and len(self.lru) > 0:
                 self.delete_oldest()
+                release = True
+            if release:
+                self.gc()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
 
+    def gc(self):
+        start_time = time.time()
+        gc.collect()
+        devices.torch_gc()
+        torch.cuda.empty_cache()
+        logging.info(f"garbage collect cost: {time.time()-start_time:.1f} s")
+
+    
     def put_ram(self, key, value):
         if self.is_ram_specified(key):
+            is_delete = False
             while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.delete_ram()
+                is_delete = True
+            if is_delete:
+                gc.collect()
+                devices.torch_gc()
             if self.get_free_ram() > self.ram_model_size:
                 if self.is_cuda(value):
                     value.to(devices.cpu)
@@ -321,10 +334,7 @@ class SpecifiedCache:
                 return
         del value
         del key
-        gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
-    
+        
 
     def is_disk_specified(self, key):
         return self.is_ram_specified(key) or self.is_gpu_specified(key)
@@ -370,7 +380,6 @@ class SpecifiedCache:
         v = self.disk.pop(least)
         os.remove(v) 
         del least  
-        gc.collect()
     
 
     def is_more_disk_frequent(self, key):
@@ -417,9 +426,6 @@ class SpecifiedCache:
             self.put_disk(oldest, v)
         del v
         del oldest
-        gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
 
 
     def get_cudas(self):
