@@ -244,7 +244,7 @@ class SpecifiedCache:
             self.delete_oldest()
             is_delete = True
         if is_delete:
-            self.gc()
+            self.cuda_gc()
 
 
     def put_lru(self, key, value):
@@ -303,20 +303,27 @@ class SpecifiedCache:
                 self.delete_oldest()
                 release = True
             if release:
-                self.gc()
+                self.cuda_gc()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
 
-    def gc(self):
+    def cuda_gc(self):
         start_time = time.time()
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
-        logging.info(f"garbage collect cost: {time.time()-start_time:.1f} s")
-
+        logging.info(f"cuda garbage collect cost: {time.time()-start_time:.1f} s")
     
+
+    def ram_gc(self):
+        start_time = time.time()
+        gc.collect()
+        devices.torch_gc()
+        logging.info(f"ram garbage collect cost: {time.time()-start_time:.1f} s")
+    
+
     def put_ram(self, key, value):
         if self.is_ram_specified(key):
             is_delete = False
@@ -324,8 +331,7 @@ class SpecifiedCache:
                 self.delete_ram()
                 is_delete = True
             if is_delete:
-                gc.collect()
-                devices.torch_gc()
+                self.ram_gc()
             if self.get_free_ram() > self.ram_model_size:
                 if self.is_cuda(value):
                     value.to(devices.cpu)
