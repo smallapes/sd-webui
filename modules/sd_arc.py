@@ -304,14 +304,15 @@ class SpecifiedCache:
 
 
     def put_ram(self, key, value):
-        if self.is_cuda(value):
-            return 
         if self.is_ram_specified(key):
             while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
                 self.delete_ram()
-            self.ram[key] = value
-            logging.info(f"add ram cache: {key}")
-            return
+            if self.get_free_ram() > self.ram_model_size:
+                if self.is_cuda(value):
+                    value.to(devices.cpu)
+                self.ram[key] = value
+                logging.info(f"add ram cache: {key}")
+                return
         del value
         del key
         gc.collect()
