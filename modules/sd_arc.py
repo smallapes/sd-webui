@@ -208,7 +208,7 @@ class SpecifiedCache:
     def delete_oldest(self):
         cudas = [k for k, v in self.lru.items()] 
         if len(cudas) == 0:
-            return 
+            return False
         sorted_cudas = sorted(cudas, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_cudas[0]
         del sorted_cudas
@@ -218,6 +218,7 @@ class SpecifiedCache:
         self.put_ram(oldest, v)
         del oldest
         del v
+        return True
 
 
     def get_model_size(self, config):
@@ -241,8 +242,7 @@ class SpecifiedCache:
         model_size = self.get_model_size(config)
         is_delete = False
         while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
-            self.delete_oldest()
-            is_delete = True
+           is_delete = is_delete or self.delete_oldest()
         if is_delete:
             self.cuda_gc()
 
@@ -300,8 +300,8 @@ class SpecifiedCache:
                         logging.info("prepare memory for controlnet") 
             release = False 
             while self.get_free_cuda() < need_size and len(self.lru) > 0:
-                self.delete_oldest()
-                release = True
+                release = release or self.delete_oldest()
+                
             if release:
                 self.cuda_gc()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
