@@ -239,7 +239,7 @@ class SpecifiedCache:
 
     def prepare_memory(self, config):
         """
-        prepare memory for model.
+        prepare cuda and ram memory for model.
         """
         model_size = self.get_model_size(config)
         while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
