@@ -268,7 +268,8 @@ class SpecifiedCache:
 
     def put(self, key, value): 
         if not self.is_cuda(value):
-            value.to(devices.cpu)
+            logging.info(f"not cache, not in cuda: {key}")
+            return 
 
         if self.contains(key):
             return
