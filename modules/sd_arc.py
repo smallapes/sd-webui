@@ -208,7 +208,7 @@ class SpecifiedCache:
     def delete_oldest(self):
         cudas = [k for k, v in self.lru.items()] 
         if len(cudas) == 0:
-            return 
+            return False
         sorted_cudas = sorted(cudas, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_cudas[0]
         del sorted_cudas
@@ -218,6 +218,7 @@ class SpecifiedCache:
         self.put_ram(oldest, v)
         del oldest
         del v
+        return True
 
 
     def get_model_size(self, config):
@@ -241,8 +242,8 @@ class SpecifiedCache:
         model_size = self.get_model_size(config)
         is_delete = False
         while (self.get_free_cuda() < model_size + self.cuda_keep_size or self.get_system_free_ram() < self.ram_keep_size) and len(self.lru) > 0:
-            self.delete_oldest()
-            is_delete = True
+           tmp = self.delete_oldest()
+           is_delete = is_delete or tmp
         if is_delete:
             self.cuda_gc()
 
@@ -298,11 +299,11 @@ class SpecifiedCache:
                 if ("controlnet" in str(type(item)).lower() and item.enabled) or (type(item) == dict and item.get("model") is not None):
                         need_size += 0.7   
                         logging.info("prepare memory for controlnet") 
-            release = False 
+            is_delete = False 
             while self.get_free_cuda() < need_size and len(self.lru) > 0:
-                self.delete_oldest()
-                release = True
-            if release:
+                tmp = self.delete_oldest()
+                is_delete = is_delete or tmp
+            if is_delete:
                 self.cuda_gc()
             logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
@@ -328,8 +329,8 @@ class SpecifiedCache:
         if self.is_ram_specified(key):
             is_delete = False
             while self.get_free_ram() < self.ram_model_size and len(self.ram) > 0:
-                self.delete_ram()
-                is_delete = True
+                tmp = self.delete_ram()
+                is_delete = is_delete or tmp
             if is_delete:
                 self.ram_gc()
             if self.get_free_ram() > self.ram_model_size:
@@ -420,7 +421,7 @@ class SpecifiedCache:
 
     def delete_ram(self,):
         if len(self.ram) == 0:
-            return
+            return False
         ckpts = [k for k in self.ram.keys()] 
         sorted_rams = sorted(ckpts, key = lambda x: self.reload_time.get(x, 0))
         oldest = sorted_rams[0]
@@ -432,6 +433,7 @@ class SpecifiedCache:
             self.put_disk(oldest, v)
         del v
         del oldest
+        return True
 
 
     def get_cudas(self):
