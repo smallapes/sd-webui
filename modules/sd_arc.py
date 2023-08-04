@@ -114,7 +114,6 @@ class SpecifiedCache:
     def get_free_ram(self):
         sysinfo = get_memory()
         used_size = sysinfo.get('ram',{}).get('used', 32*1024**3)/1024**3
-        free_size = sysinfo.get('ram',{}).get('free', 32*1024**3)/1024**3
         if shared.cmd_opts.system_ram_size:
             specified_free_size = shared.cmd_opts.system_ram_size - used_size
             logging.info(f"free size method 1: {specified_free_size}")
