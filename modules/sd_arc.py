@@ -102,41 +102,45 @@ class SpecifiedCache:
         self.gpu_specified_models = gpu_filenames
         self.ram_specified_models = ram_filenames
         return not_exist
+    
 
     def is_gpu_specified(self, key):
         return self.gpu_specified_models is None or self.get_model_name(key) in self.gpu_specified_models
+    
     
     def is_ram_specified(self, key):
         return self.ram_specified_models is None or self.get_model_name(key) in self.ram_specified_models
 
 
-    def lru_get(self, key):
-        value =  self.lru.get(key)
+    def lru_pop(self, key):
+        print('using model cached in device')
+        value =  self.lru.pop(key)
         if self.is_cuda(value):
             return value
         return None
     
-    def ram_get(self, key):
+    
+    def ram_pop(self, key):
+        print('using model cached in ram')
         value =  self.ram.pop(key)
         if not self.is_cuda(value):
-            self.put_lru(key, value.to(devices.device))
-            return value
+            return value.to(devices.device)
         return None
+    
 
-
-    def get(self, key):
+    def pop(self, key):
         self.reload(key)
         if self.lru.get(key) is not None:
-            return self.lru_get(key)   
+            return self.lru_pop(key)   
         if self.ram.get(key) is not None:
-            return self.ram_get(key) 
+            return self.ram_pop(key) 
         return None
     
     def is_cuda(self, value):
         return 'cuda' in str(value.device)
 
     def contains(self, key):
-        return key in self.lru
+        return (key in self.lru ) or (key in self.ram)
     
     def delete_oldest(self):
         cudas = [k for k, v in self.lru.items()] 
@@ -150,16 +154,6 @@ class SpecifiedCache:
         v = self.lru.pop(oldest)
         self.put_ram(oldest, v.to(devices.cpu))
         del oldest
-        del v
-        gc.collect()
-        devices.torch_gc()
-        torch.cuda.empty_cache()
-
-    
-    def pop(self, key):
-        if key not in self.lru:
-            return 
-        v = self.lru.pop(key)
         del v
         gc.collect()
         devices.torch_gc()
@@ -224,9 +218,9 @@ class SpecifiedCache:
             return 
         if self.is_ram_specified(key):
             while self.k_ram and len(self.ram) >= self.k_ram:
-                self.pop_ram()
+                self.delete_ram()
             while self.get_residual_ram() < self.ram_model_size and len(self.ram) > 0:
-                self.pop_ram()
+                self.delete_ram()
             self.ram[key] = value
             print(f"add ram cache: {key}")
             return
@@ -236,7 +230,7 @@ class SpecifiedCache:
         devices.torch_gc()
         torch.cuda.empty_cache()
         
-    def pop_ram(self,):
+    def delete_ram(self,):
         if len(self.ram) == 0:
             return
         ckpts = [k for k in self.ram.keys()] 

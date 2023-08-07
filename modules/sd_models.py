@@ -556,9 +556,11 @@ def reload_model_weights_arc(sd_model=None, info=None):
     if sd_model is not None:  # previous model load failed
         if sd_model.sd_model_checkpoint == checkpoint_info.filename:
             return
-        if arc.get(checkpoint_info.filename) is not None:
-            print('using model cached in device')
-            
+        if arc.contains(checkpoint_info.filename):         
+            # get cache model.
+            model = arc.pop(checkpoint_info.filename)
+            timer.record('get cached model')
+
             # cache model.
             sd_hijack.model_hijack.undo_hijack(sd_model)
             model_data.sd_model = None
@@ -566,15 +568,14 @@ def reload_model_weights_arc(sd_model=None, info=None):
             sd_model = None
             timer.record('cache model')
 
-            # get cache model.
-            model = arc.get(checkpoint_info.filename)
-            sd_hijack.model_hijack.hijack(model)
-            model_data.sd_model = model
-            script_callbacks.model_loaded_callback(model)
-            timer.record('load cached model')
-
-            print(f"Weights loaded in {timer.summary()}.")
-            return 
+            if model:
+                sd_hijack.model_hijack.hijack(model)
+                model_data.sd_model = model
+                script_callbacks.model_loaded_callback(model)
+                print(f"Weights loaded in {timer.summary()}.")
+                return 
+            else:
+                print(f"model miss in cache {checkpoint_info.filename}.")
         sd_unet.apply_unet("None")
 
         if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
@@ -665,8 +666,6 @@ def unload_model_weights(sd_model=None, info=None):
     timer = Timer()
 
     if model_data.sd_model:
-        if shared.cmd_opts.arc:
-            arc.pop(model_data.sd_model.sd_model_checkpoint)
         model_data.sd_model.to(devices.cpu)
         sd_hijack.model_hijack.undo_hijack(model_data.sd_model)
         model_data.sd_model = None
