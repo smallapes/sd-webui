@@ -568,7 +568,7 @@ def decode_latent_batch(model, batch, target_device=None, check_for_nans=False):
                 errors.print_error_explanation(
                     "A tensor with all NaNs was produced in VAE.\n"
                     "Web UI will now convert VAE into 32-bit float and retry.\n"
-                    "To disable this behavior, disable the 'Automaticlly revert VAE to 32-bit floats' setting.\n"
+                    "To disable this behavior, disable the 'Automatically revert VAE to 32-bit floats' setting.\n"
                     "To always start with 32-bit VAE, use --no-half-vae commandline flag."
                 )
 
@@ -1119,9 +1119,6 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             images.save_image(image, self.outpath_samples, "", seeds[index], prompts[index], opts.samples_format, info=info, p=self, suffix="-before-highres-fix")
 
         img2img_sampler_name = self.hr_sampler_name or self.sampler_name
-
-        if self.sampler_name in ['PLMS', 'UniPC']:  # PLMS/UniPC do not support img2img so we just silently switch to DDIM
-            img2img_sampler_name = 'DDIM'
 
         self.sampler = sd_samplers.create_sampler(img2img_sampler_name, self.sd_model)
 
