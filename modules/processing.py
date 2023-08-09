@@ -688,9 +688,10 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         res = process_images_inner(p)
         logging.info("finished")
     except RuntimeError as e:
-        if 'CUDA out of memory' in str(e):
-            sd_models.unload_model_weights()
-            torch.cuda.empty_cache()
+        if shared.cmd_opts.arc and 'CUDA out of memory' in str(e):
+            import signal
+            pid = os.getpid()
+            os.kill(pid, signal.SIGTERM)
         raise e
     finally:
         sd_models.apply_token_merging(p.sd_model, 0)
