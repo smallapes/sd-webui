@@ -691,6 +691,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         if shared.cmd_opts.arc and 'CUDA out of memory' in str(e):
             import signal
             pid = os.getpid()
+            logging.error("kill process becauce CUDA out of memory.")
             os.kill(pid, signal.SIGTERM)
         raise e
     finally:
