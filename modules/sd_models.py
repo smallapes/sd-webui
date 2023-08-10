@@ -625,7 +625,12 @@ def reload_model_weights_arc(sd_model=None, info=None):
                 model_data.set_sd_model(sd_model)
                 script_callbacks.model_loaded_callback(model)
                 print(f"Weights loaded in {timer.summary()}.")
-                sd_unet.apply_unet()
+                # sd_unet.apply_unet("None")
+                sd_vae.delete_base_vae()
+                sd_vae.clear_loaded_vae()
+                vae_file, vae_source = sd_vae.resolve_vae(checkpoint_info.filename).tuple()
+                sd_vae.load_vae(model, vae_file, vae_source)
+                timer.record("load VAE")
                 return 
             else:
                 print(f"model miss in cache {checkpoint_info.filename}.")
