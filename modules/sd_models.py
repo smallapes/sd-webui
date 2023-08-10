@@ -613,6 +613,7 @@ def reload_model_weights_arc(sd_model=None, info=None):
             timer.record('get cached model')
 
             # cache model.
+            sd_unet.apply_unet("None")
             sd_hijack.model_hijack.undo_hijack(sd_model)
             model_data.sd_model = None
             arc.put(sd_model.sd_model_checkpoint, sd_model)
@@ -621,19 +622,20 @@ def reload_model_weights_arc(sd_model=None, info=None):
 
             if model:
                 sd_hijack.model_hijack.hijack(model)
-                model_data.sd_model = model
+                model_data.set_sd_model(sd_model)
                 script_callbacks.model_loaded_callback(model)
                 print(f"Weights loaded in {timer.summary()}.")
+                sd_unet.apply_unet()
                 return 
             else:
                 print(f"model miss in cache {checkpoint_info.filename}.")
-        sd_unet.apply_unet("None")
 
         if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
             lowvram.send_everything_to_cpu()
 
     # cache model.
     if sd_model is not None:
+        sd_unet.apply_unet("None")
         sd_hijack.model_hijack.undo_hijack(sd_model)
         model_data.sd_model = None
         arc.put(sd_model.sd_model_checkpoint, sd_model)
