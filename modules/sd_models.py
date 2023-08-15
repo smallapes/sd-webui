@@ -306,8 +306,8 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
 
     if model.is_sdxl:
         sd_models_xl.extend_sdxl(model)
-
-    model.load_state_dict(state_dict, strict=False)
+    # todo(maoxianren)
+    # model.load_state_dict(state_dict, strict=False)
     timer.record("apply weights to model")
 
     if shared.opts.sd_checkpoint_cache > 0:
@@ -547,7 +547,8 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     sd_model = None
     try:
         with sd_disable_initialization.DisableInitialization(disable_clip=clip_is_included_into_sd or shared.cmd_opts.do_not_download_clip):
-            with sd_disable_initialization.InitializeOnMeta():
+            # with sd_disable_initialization.InitializeOnMeta():
+            if 1:
                 sd_model = instantiate_from_config(sd_config.model)
 
     except Exception as e:
@@ -563,9 +564,19 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     timer.record("create model")
 
+    # todo: delete
+    if 'v1-5-pruned-emaonly.safetensors' in str(checkpoint_info.filename):
+        # torch.save(sd_model.state_dict(), os.path.join(model_path, 'demo.ckpt'))
+        safetensors.torch.save_file(sd_model.state_dict(), os.path.join(model_path, 'demo.safetensors'))
+        # a = sd_model.state_dict()
+
+        # safetensors.torch.save_model(a, os.path.join(model_path, 'demo.safetensors'))
+        # sd_model.save_pretrained(os.path.join(model_path, 'demo.safetensors'), safe_serialization=True)
+
     with sd_disable_initialization.LoadStateDictOnMeta(state_dict, devices.cpu):
         load_model_weights(sd_model, checkpoint_info, state_dict, timer)
     timer.record("load weights from state dict")
+
 
     send_model_to_device(sd_model)
     timer.record("move model to device")

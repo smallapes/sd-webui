@@ -218,7 +218,8 @@ def load_vae(model, vae_file=None, vae_source="from unknown source"):
 
 # don't call this from outside
 def _load_vae_dict(model, vae_dict_1):
-    model.first_stage_model.load_state_dict(vae_dict_1)
+    # todo(maoxianren)
+    # model.first_stage_model.load_state_dict(vae_dict_1)
     model.first_stage_model.to(devices.dtype_vae)
 
 
