@@ -534,7 +534,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     else:
         state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
 
-    checkpoint_config = sd_models_config.find_checkpoint_config(state_dict, checkpoint_info)
+    checkpoint_config = "/workspace/maoxianren/stable-diffusion-webui-0/configs/v1-inference-tiny.yaml" # sd_models_config.find_checkpoint_config(state_dict, checkpoint_info)
     clip_is_included_into_sd = any(x for x in [sd1_clip_weight, sd2_clip_weight, sdxl_clip_weight, sdxl_refiner_clip_weight] if x in state_dict)
 
     timer.record("find config")
@@ -570,7 +570,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     # todo: delete
     # if 'v1-5-pruned-emaonly.safetensors' in str(checkpoint_info.filename):
         # torch.save(sd_model.state_dict(), os.path.join(model_path, 'demo.ckpt'))
-    safetensors.torch.save_file(sd_model.state_dict(), os.path.join(model_path, 'demo.safetensors'))
+    safetensors.torch.save_file(sd_model.state_dict(), os.path.join(model_path, 'tiny.safetensors'))
         # a = sd_model.state_dict()
 
         # safetensors.torch.save_model(a, os.path.join(model_path, 'demo.safetensors'))
