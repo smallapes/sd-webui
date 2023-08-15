@@ -33,9 +33,9 @@ model:
         in_channels: 4
         out_channels: 4
         model_channels: 32 # 320
-        attention_resolutions: [ 4, 2, 1 ]
+        attention_resolutions: [ 1 ] 
         num_res_blocks: 2
-        channel_mult: [ 1, 2, 4, 4 ]
+        channel_mult: [ 1 ] 
         num_heads: 1 # 8
         use_spatial_transformer: True
         transformer_depth: 1
@@ -57,24 +57,11 @@ model:
           ch: 32 # 128
           ch_mult:
           - 1
-          - 2
-          - 4
-          - 4
-          num_res_blocks: 2
+          num_res_blocks: 0
           attn_resolutions: []
           dropout: 0.0
         lossconfig:
           target: torch.nn.Identity
-
-    # cond_stage_config:
-    #   target: ldm.modules.encoders.modules.ClassEmbedder
-    #   params:
-    #     embed_dim: 512
-    #     n_classes: 1
-    #   #   version: openai/clip-vit-base-patch16 
-
-    # cond_stage_config:
-    #   target: ldm.modules.encoders.modules.FrozenOpenCLIPEmbedder  
 
     cond_stage_config:
       target: ldm.modules.encoders.modules.FrozenCLIPEmbedder  
