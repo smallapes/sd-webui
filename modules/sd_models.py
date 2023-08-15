@@ -313,9 +313,12 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
     if shared.opts.sd_checkpoint_cache > 0:
         # cache newly loaded model
         if not shared.cmd_opts.arc:
-            checkpoints_loaded[checkpoint_info] = state_dict
+            # todo delete
+            # checkpoints_loaded[checkpoint_info] = state_dict
+            print(f">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>cache model")
 
     del state_dict
+    gc.collect()
 
     if shared.cmd_opts.opt_channelslast:
         model.to(memory_format=torch.channels_last)
