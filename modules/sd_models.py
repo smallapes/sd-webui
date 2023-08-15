@@ -568,9 +568,9 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     timer.record("create model")
 
     # todo: delete
-    if 'v1-5-pruned-emaonly.safetensors' in str(checkpoint_info.filename):
+    # if 'v1-5-pruned-emaonly.safetensors' in str(checkpoint_info.filename):
         # torch.save(sd_model.state_dict(), os.path.join(model_path, 'demo.ckpt'))
-        safetensors.torch.save_file(sd_model.state_dict(), os.path.join(model_path, 'demo.safetensors'))
+    safetensors.torch.save_file(sd_model.state_dict(), os.path.join(model_path, 'demo.safetensors'))
         # a = sd_model.state_dict()
 
         # safetensors.torch.save_model(a, os.path.join(model_path, 'demo.safetensors'))

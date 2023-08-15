@@ -36,10 +36,10 @@ model:
         attention_resolutions: [ 1 ] 
         num_res_blocks: 2
         channel_mult: [ 1 ] 
-        num_heads: 1 # 8
+        num_heads: 1 
         use_spatial_transformer: True
         transformer_depth: 1
-        context_dim: 32 # 768
+        context_dim: 32 # minimum 32
         use_checkpoint: True
         legacy: False   
 
@@ -54,7 +54,7 @@ model:
           resolution: 256
           in_channels: 3
           out_ch: 3
-          ch: 32 # 128
+          ch: 32 # minimum 32
           ch_mult:
           - 1
           num_res_blocks: 0
