@@ -307,7 +307,7 @@ def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer
     if model.is_sdxl:
         sd_models_xl.extend_sdxl(model)
     # todo(maoxianren)
-    # model.load_state_dict(state_dict, strict=False)
+    model.load_state_dict(state_dict, strict=False)
     timer.record("apply weights to model")
 
     if shared.opts.sd_checkpoint_cache > 0:
