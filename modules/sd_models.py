@@ -533,8 +533,9 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
         state_dict = already_loaded_state_dict
     else:
         state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
-
-    checkpoint_config = "/workspace/maoxianren/stable-diffusion-webui-0/configs/v1-inference-tiny.yaml" # sd_models_config.find_checkpoint_config(state_dict, checkpoint_info)
+        
+    checkpoint_config = sd_models_config.find_checkpoint_config(state_dict, checkpoint_info)
+    checkpoint_config = "/workspace/maoxianren/stable-diffusion-webui-0/configs/v1-inference-tiny.yaml" 
     clip_is_included_into_sd = any(x for x in [sd1_clip_weight, sd2_clip_weight, sdxl_clip_weight, sdxl_refiner_clip_weight] if x in state_dict)
 
     timer.record("find config")
