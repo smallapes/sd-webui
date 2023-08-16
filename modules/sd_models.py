@@ -564,6 +564,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     print(f"Creating model from config: {checkpoint_config}")
     if shared.cmd_opts.arc:
         arc.prepare_memory(checkpoint_config) 
+        
     sd_model = None
     try:
         with sd_disable_initialization.DisableInitialization(disable_clip=clip_is_included_into_sd or shared.cmd_opts.do_not_download_clip):
