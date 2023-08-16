@@ -735,8 +735,6 @@ def reload_model_weights(sd_model=None, info=None):
     if shared.cmd_opts.arc:
         return reload_model_weights_arc(sd_model, info)
 
-    from modules import lowvram, devices, sd_hijack
-
     checkpoint_info = info or select_checkpoint()
 
     timer = Timer()
