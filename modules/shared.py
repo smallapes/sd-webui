@@ -732,7 +732,6 @@ class Options:
 
     def load(self, filename):
         with open(filename, "r", encoding="utf8") as file:
-
             self.data = json.load(file)
 
         # 1.6.0 VAE defaults
