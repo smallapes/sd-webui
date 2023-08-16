@@ -45,21 +45,29 @@ class CompVisTimestepsVDenoiser(torch.nn.Module):
 
 class CFGDenoiserTimesteps(CFGDenoiser):
 
-    def __init__(self, model, sampler):
-        super().__init__(model, sampler)
+    def __init__(self, sampler):
+        super().__init__(sampler)
 
-        self.alphas = model.inner_model.alphas_cumprod
+        self.alphas = shared.sd_model.alphas_cumprod
+        self.mask_before_denoising = True
 
     def get_pred_x0(self, x_in, x_out, sigma):
-        ts = int(sigma.item())
+        ts = sigma.to(dtype=int)
 
-        s_in = x_in.new_ones([x_in.shape[0]])
-        a_t = self.alphas[ts].item() * s_in
+        a_t = self.alphas[ts][:, None, None, None]
         sqrt_one_minus_at = (1 - a_t).sqrt()
 
         pred_x0 = (x_in - sqrt_one_minus_at * x_out) / a_t.sqrt()
 
         return pred_x0
+
+    @property
+    def inner_model(self):
+        if self.model_wrap is None:
+            denoiser = CompVisTimestepsVDenoiser if shared.sd_model.parameterization == "v" else CompVisTimestepsDenoiser
+            self.model_wrap = denoiser(shared.sd_model)
+
+        return self.model_wrap
 
 
 class CompVisSampler(sd_samplers_common.Sampler):
@@ -68,10 +76,9 @@ class CompVisSampler(sd_samplers_common.Sampler):
 
         self.eta_option_field = 'eta_ddim'
         self.eta_infotext_field = 'Eta DDIM'
+        self.eta_default = 0.0
 
-        denoiser = CompVisTimestepsVDenoiser if sd_model.parameterization == "v" else CompVisTimestepsDenoiser
-        self.model_wrap = denoiser(sd_model)
-        self.model_wrap_cfg = CFGDenoiserTimesteps(self.model_wrap, self)
+        self.model_wrap_cfg = CFGDenoiserTimesteps(self)
 
     def get_timesteps(self, p, steps):
         discard_next_to_last_sigma = self.config is not None and self.config.options.get('discard_next_to_last_sigma', False)
@@ -97,6 +104,10 @@ class CompVisSampler(sd_samplers_common.Sampler):
 
         xi = x * sqrt_alpha_cumprod + noise * sqrt_one_minus_alpha_cumprod
 
+        if opts.img2img_extra_noise > 0:
+            p.extra_generation_params["Extra noise"] = opts.img2img_extra_noise
+            xi += noise * opts.img2img_extra_noise * sqrt_alpha_cumprod
+
         extra_params_kwargs = self.initialize(p)
         parameters = inspect.signature(self.func).parameters
 
@@ -107,7 +118,7 @@ class CompVisSampler(sd_samplers_common.Sampler):
 
         self.model_wrap_cfg.init_latent = x
         self.last_latent = x
-        extra_args = {
+        self.sampler_extra_args = {
             'cond': conditioning,
             'image_cond': image_conditioning,
             'uncond': unconditional_conditioning,
@@ -115,7 +126,7 @@ class CompVisSampler(sd_samplers_common.Sampler):
             's_min_uncond': self.s_min_uncond
         }
 
-        samples = self.launch_sampling(t_enc + 1, lambda: self.func(self.model_wrap_cfg, xi, extra_args=extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        samples = self.launch_sampling(t_enc + 1, lambda: self.func(self.model_wrap_cfg, xi, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
 
         if self.model_wrap_cfg.padded_cond_uncond:
             p.extra_generation_params["Pad conds"] = True
@@ -133,13 +144,14 @@ class CompVisSampler(sd_samplers_common.Sampler):
             extra_params_kwargs['timesteps'] = timesteps
 
         self.last_latent = x
-        samples = self.launch_sampling(steps, lambda: self.func(self.model_wrap_cfg, x, extra_args={
+        self.sampler_extra_args = {
             'cond': conditioning,
             'image_cond': image_conditioning,
             'uncond': unconditional_conditioning,
             'cond_scale': p.cfg_scale,
             's_min_uncond': self.s_min_uncond
-        }, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        }
+        samples = self.launch_sampling(steps, lambda: self.func(self.model_wrap_cfg, x, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
 
         if self.model_wrap_cfg.padded_cond_uncond:
             p.extra_generation_params["Pad conds"] = True

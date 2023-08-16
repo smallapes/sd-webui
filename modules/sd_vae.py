@@ -2,7 +2,8 @@ import os
 import collections
 from dataclasses import dataclass
 
-from modules import paths, shared, devices, script_callbacks, sd_models, extra_networks
+from modules import paths, shared, devices, script_callbacks, sd_models, extra_networks, lowvram, sd_hijack, hashes
+
 import glob
 from copy import deepcopy
 
@@ -17,6 +18,22 @@ loaded_vae_file = None
 checkpoint_info = None
 
 checkpoints_loaded = collections.OrderedDict()
+
+
+def get_loaded_vae_name():
+    if loaded_vae_file is None:
+        return None
+
+    return os.path.basename(loaded_vae_file)
+
+
+def get_loaded_vae_hash():
+    if loaded_vae_file is None:
+        return None
+
+    sha256 = hashes.sha256(loaded_vae_file, 'vae')
+
+    return sha256[0:10] if sha256 else None
 
 
 def get_base_vae(model):
@@ -143,7 +160,7 @@ def resolve_vae_from_user_metadata(checkpoint_file) -> VaeResolution:
 
 def resolve_vae_near_checkpoint(checkpoint_file) -> VaeResolution:
     vae_near_checkpoint = find_vae_near_checkpoint(checkpoint_file)
-    if vae_near_checkpoint is not None and (shared.opts.sd_vae_as_default or is_automatic):
+    if vae_near_checkpoint is not None and (not shared.opts.sd_vae_overrides_per_model_preferences or is_automatic):
         return VaeResolution(vae_near_checkpoint, 'found near the checkpoint')
 
     return VaeResolution(resolved=False)
@@ -231,8 +248,6 @@ unspecified = object()
 
 
 def reload_vae_weights(sd_model=None, vae_file=unspecified):
-    from modules import lowvram, devices, sd_hijack
-
     if not sd_model:
         sd_model = shared.sd_model
 

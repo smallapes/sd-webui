@@ -14,7 +14,7 @@ import ldm.modules.midas as midas
 
 from ldm.util import instantiate_from_config
 
-from modules import paths, shared, modelloader, devices, script_callbacks, sd_vae, sd_disable_initialization, errors, hashes, sd_models_config, sd_unet, sd_models_xl, cache
+from modules import paths, shared, modelloader, devices, script_callbacks, sd_vae, sd_disable_initialization, errors, hashes, sd_models_config, sd_unet, sd_models_xl, cache, extra_networks, processing, lowvram, sd_hijack
 from modules.timer import Timer
 import tomesd
 from modules import sd_arc
@@ -70,7 +70,9 @@ class CheckpointInfo:
         self.title = name if self.shorthash is None else f'{name} [{self.shorthash}]'
         self.short_title = self.name_for_extra if self.shorthash is None else f'{self.name_for_extra} [{self.shorthash}]'
 
-        self.ids = [self.hash, self.model_name, self.title, name, self.name_for_extra, f'{name} [{self.hash}]'] + ([self.shorthash, self.sha256, f'{self.name} [{self.shorthash}]'] if self.shorthash else [])
+        self.ids = [self.hash, self.model_name, self.title, name, self.name_for_extra, f'{name} [{self.hash}]']
+        if self.shorthash:
+            self.ids += [self.shorthash, self.sha256, f'{self.name} [{self.shorthash}]', f'{self.name_for_extra} [{self.shorthash}]']
 
     def register(self):
         checkpoints_list[self.title] = self
@@ -82,10 +84,14 @@ class CheckpointInfo:
         if self.sha256 is None:
             return
 
-        self.shorthash = self.sha256[0:10]
+        shorthash = self.sha256[0:10]
+        if self.shorthash == self.sha256[0:10]:
+            return self.shorthash
+
+        self.shorthash = shorthash
 
         if self.shorthash not in self.ids:
-            self.ids += [self.shorthash, self.sha256, f'{self.name} [{self.shorthash}]']
+            self.ids += [self.shorthash, self.sha256, f'{self.name} [{self.shorthash}]', f'{self.name_for_extra} [{self.shorthash}]']
 
         checkpoints_list.pop(self.title, None)
         self.title = f'{self.name} [{self.shorthash}]'
@@ -143,6 +149,9 @@ re_strip_checksum = re.compile(r"\s*\[[^]]+]\s*$")
 
 
 def get_closet_checkpoint_match(search_string):
+    if not search_string:
+        return None
+
     checkpoint_info = checkpoint_aliases.get(search_string, None)
     if checkpoint_info is not None:
         return checkpoint_info
@@ -291,11 +300,27 @@ def get_checkpoint_state_dict(checkpoint_info: CheckpointInfo, timer):
     return res
 
 
+class SkipWritingToConfig:
+    """This context manager prevents load_model_weights from writing checkpoint name to the config when it loads weight."""
+
+    skip = False
+    previous = None
+
+    def __enter__(self):
+        self.previous = SkipWritingToConfig.skip
+        SkipWritingToConfig.skip = True
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        SkipWritingToConfig.skip = self.previous
+
+
 def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer):
     sd_model_hash = checkpoint_info.calculate_shorthash()
     timer.record("calculate hash")
 
-    shared.opts.data["sd_model_checkpoint"] = checkpoint_info.title
+    if not SkipWritingToConfig.skip:
+        shared.opts.data["sd_model_checkpoint"] = checkpoint_info.title
 
     if state_dict is None:
         state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
@@ -476,7 +501,6 @@ model_data = SdModelData()
 
 
 def get_empty_cond(sd_model):
-    from modules import extra_networks, processing
 
     p = processing.StableDiffusionProcessingTxt2Img()
     extra_networks.activate(p, {})
@@ -489,8 +513,6 @@ def get_empty_cond(sd_model):
 
 
 def send_model_to_cpu(m):
-    from modules import lowvram
-
     if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
         lowvram.send_everything_to_cpu()
     else:
@@ -500,8 +522,6 @@ def send_model_to_cpu(m):
 
 
 def send_model_to_device(m):
-    from modules import lowvram
-
     if shared.cmd_opts.lowvram or shared.cmd_opts.medvram:
         lowvram.setup_for_low_vram(m, shared.cmd_opts.medvram)
     else:
@@ -596,6 +616,60 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     return sd_model
 
 
+def reuse_model_from_already_loaded(sd_model, checkpoint_info, timer):
+    """
+    Checks if the desired checkpoint from checkpoint_info is not already loaded in model_data.loaded_sd_models.
+    If it is loaded, returns that (moving it to GPU if necessary, and moving the currently loadded model to CPU if necessary).
+    If not, returns the model that can be used to load weights from checkpoint_info's file.
+    If no such model exists, returns None.
+    Additionaly deletes loaded models that are over the limit set in settings (sd_checkpoints_limit).
+    """
+
+    already_loaded = None
+    for i in reversed(range(len(model_data.loaded_sd_models))):
+        loaded_model = model_data.loaded_sd_models[i]
+        if loaded_model.sd_checkpoint_info.filename == checkpoint_info.filename:
+            already_loaded = loaded_model
+            continue
+
+        if len(model_data.loaded_sd_models) > shared.opts.sd_checkpoints_limit > 0:
+            print(f"Unloading model {len(model_data.loaded_sd_models)} over the limit of {shared.opts.sd_checkpoints_limit}: {loaded_model.sd_checkpoint_info.title}")
+            model_data.loaded_sd_models.pop()
+            send_model_to_trash(loaded_model)
+            timer.record("send model to trash")
+
+        if shared.opts.sd_checkpoints_keep_in_cpu:
+            send_model_to_cpu(sd_model)
+            timer.record("send model to cpu")
+
+    if already_loaded is not None:
+        send_model_to_device(already_loaded)
+        timer.record("send model to device")
+
+        model_data.set_sd_model(already_loaded)
+
+        if not SkipWritingToConfig.skip:
+            shared.opts.data["sd_model_checkpoint"] = already_loaded.sd_checkpoint_info.title
+            shared.opts.data["sd_checkpoint_hash"] = already_loaded.sd_checkpoint_info.sha256
+
+        print(f"Using already loaded model {already_loaded.sd_checkpoint_info.title}: done in {timer.summary()}")
+        return model_data.sd_model
+    elif shared.opts.sd_checkpoints_limit > 1 and len(model_data.loaded_sd_models) < shared.opts.sd_checkpoints_limit:
+        print(f"Loading model {checkpoint_info.title} ({len(model_data.loaded_sd_models) + 1} out of {shared.opts.sd_checkpoints_limit})")
+
+        model_data.sd_model = None
+        load_model(checkpoint_info)
+        return model_data.sd_model
+    elif len(model_data.loaded_sd_models) > 0:
+        sd_model = model_data.loaded_sd_models.pop()
+        model_data.sd_model = sd_model
+
+        print(f"Reusing loaded model {sd_model.sd_checkpoint_info.title} to load {checkpoint_info.title}")
+        return sd_model
+    else:
+        return None
+
+
 def reload_model_weights_arc(sd_model=None, info=None):
     from modules import lowvram, devices, sd_hijack
     checkpoint_info = info or select_checkpoint()
@@ -657,59 +731,12 @@ def reload_model_weights_arc(sd_model=None, info=None):
     return sd_model
 
 
-def reuse_model_from_already_loaded(sd_model, checkpoint_info, timer):
-    """
-    Checks if the desired checkpoint from checkpoint_info is not already loaded in model_data.loaded_sd_models.
-    If it is loaded, returns that (moving it to GPU if necessary, and moving the currently loadded model to CPU if necessary).
-    If not, returns the model that can be used to load weights from checkpoint_info's file.
-    If no such model exists, returns None.
-    Additionaly deletes loaded models that are over the limit set in settings (sd_checkpoints_limit).
-    """
-
-    already_loaded = None
-    for i in reversed(range(len(model_data.loaded_sd_models))):
-        loaded_model = model_data.loaded_sd_models[i]
-        if loaded_model.sd_checkpoint_info.filename == checkpoint_info.filename:
-            already_loaded = loaded_model
-            continue
-
-        if len(model_data.loaded_sd_models) > shared.opts.sd_checkpoints_limit > 0:
-            print(f"Unloading model {len(model_data.loaded_sd_models)} over the limit of {shared.opts.sd_checkpoints_limit}: {loaded_model.sd_checkpoint_info.title}")
-            model_data.loaded_sd_models.pop()
-            send_model_to_trash(loaded_model)
-            timer.record("send model to trash")
-
-        if shared.opts.sd_checkpoints_keep_in_cpu:
-            send_model_to_cpu(sd_model)
-            timer.record("send model to cpu")
-
-    if already_loaded is not None:
-        send_model_to_device(already_loaded)
-        timer.record("send model to device")
-
-        model_data.set_sd_model(already_loaded)
-        print(f"Using already loaded model {already_loaded.sd_checkpoint_info.title}: done in {timer.summary()}")
-        return model_data.sd_model
-    elif shared.opts.sd_checkpoints_limit > 1 and len(model_data.loaded_sd_models) < shared.opts.sd_checkpoints_limit:
-        print(f"Loading model {checkpoint_info.title} ({len(model_data.loaded_sd_models) + 1} out of {shared.opts.sd_checkpoints_limit})")
-
-        model_data.sd_model = None
-        load_model(checkpoint_info)
-        return model_data.sd_model
-    elif len(model_data.loaded_sd_models) > 0:
-        sd_model = model_data.loaded_sd_models.pop()
-        model_data.sd_model = sd_model
-
-        print(f"Reusing loaded model {sd_model.sd_checkpoint_info.title} to load {checkpoint_info.title}")
-        return sd_model
-    else:
-        return None
-
 def reload_model_weights(sd_model=None, info=None):
     if shared.cmd_opts.arc:
         return reload_model_weights_arc(sd_model, info)
 
     from modules import lowvram, devices, sd_hijack
+
     checkpoint_info = info or select_checkpoint()
 
     timer = Timer()
@@ -772,7 +799,6 @@ def reload_model_weights(sd_model=None, info=None):
 
 
 def unload_model_weights(sd_model=None, info=None):
-    from modules import devices, sd_hijack
     timer = Timer()
 
     if model_data.sd_model:
