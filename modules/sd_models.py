@@ -697,7 +697,7 @@ def reload_model_weights_arc(sd_model=None, info=None):
 
             if model:
                 sd_hijack.model_hijack.hijack(model)
-                model_data.set_sd_model(sd_model)
+                model_data.set_sd_model(model)
                 script_callbacks.model_loaded_callback(model)
                 # sd_unet.apply_unet("None")
                 sd_vae.delete_base_vae()
