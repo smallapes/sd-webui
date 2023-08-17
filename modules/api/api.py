@@ -486,6 +486,7 @@ class Api:
 
 
     def getCachedmodelsapi(self, req: models.getCachedModelsRequest = Depends()):
+        # copy from check_progress_call of ui.py
         arc = sd_models.arc
         cudas = arc.get_cudas()
         if sd_models.model_data.sd_model:

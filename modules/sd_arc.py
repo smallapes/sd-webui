@@ -83,13 +83,13 @@ def get_memory():
 
 class SpecifiedCache:
     def __init__(self) -> None:
-        self.model_size = 5.5 if cmd_opts.no_half else (
-            2.56 if cmd_opts.no_half_vae else 2.39)
-        self.model_size_xl = 8.2 if cmd_opts.no_half else (
-            6.5 if cmd_opts.no_half_vae else 6.5)
+        self.model_size = 5.5 if cmd_opts.no_half else (2.56 if cmd_opts.no_half_vae else 2.39)
+        self.model_size_xl = 13 if cmd_opts.no_half else (9 if cmd_opts.no_half_vae else 7)
         self.model_size_disk = 2.2
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
+        self.size_base_xl = 3.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 1
         self.batch_base = 0.3
+        self.batch_base_xl = 0.5
         self.ram_model_size = 5
         self.cuda_model_ram = 3
 
@@ -110,33 +110,29 @@ class SpecifiedCache:
         gpu_memory_size = self.get_free_cuda()
         ram_size = self.get_free_ram()
         disk_size = self.get_free_disk()
-        logging.info(
-            f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
+        logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
         if shared.cmd_opts.arc:
             logging.info("multiple-level cache enabled.")
 
     def get_free_cuda(self):
         sysinfo = get_memory()
-        free_size = sysinfo.get('cuda', {}).get(
-            'system', {}).get('free', 24*1024**3)/1024**3
-        used_size = sysinfo.get('cuda', {}).get(
-            'system', {}).get('used', 24*1024**3)/1024**3
-        return free_size  # if used_size < 3 else 0
+        free_size = sysinfo.get('cuda', {}).get('system', {}).get('free', 24*1024**3)/1024**3
+        return free_size 
 
     def get_free_ram(self):
         sysinfo = get_memory()
         used_size = sysinfo.get('ram', {}).get('used', 32*1024**3)/1024**3
         if shared.cmd_opts.system_ram_size:
             specified_free_size = shared.cmd_opts.system_ram_size - used_size
-            logging.info(f"free size method 1: {specified_free_size}")
+            logging.debug(f"free size method 1: {specified_free_size}")
             return shared.cmd_opts.system_ram_size - used_size
         if shared.opts.sd_checkpoint_cache is not None:
             rectified_free_size = shared.opts.sd_checkpoint_cache * 5 - \
                 len(self.lru) * self.cuda_model_ram - len(self.ram) * 5
-            logging.info(f"free size method 2: {rectified_free_size}")
-            return rectified_free_size  # if used_size < 3 else 0
+            logging.debug(f"free size method 2: {rectified_free_size}")
+            return rectified_free_size
         free_size = 0
-        logging.info(f"free size method 3: {free_size}")
+        logging.debug(f"free size method 3: {free_size}")
         return free_size
 
     def get_system_free_ram(self):
@@ -145,14 +141,8 @@ class SpecifiedCache:
         return free_size
 
     def get_free_disk(self):
-        # def bytes_to_gb(bytes):
-        #     return bytes / (1024 ** 3)
-
-        # usage = psutil.disk_usage(model_path)
-        # free_space_gb = bytes_to_gb(usage.free)
         if shared.cmd_opts.arc_disk_size:
-            free_space_gb = shared.cmd_opts.arc_disk_size - \
-                len(self.disk) * self.model_size_disk
+            free_space_gb = shared.cmd_opts.arc_disk_size - len(self.disk) * self.model_size_disk
             return free_space_gb
         return 0
 
@@ -225,7 +215,7 @@ class SpecifiedCache:
         del oldest
         del v
         return True
-
+    
     def get_model_size(self, config):
         model_size = self.model_size_xl
         if config:
@@ -295,8 +285,11 @@ class SpecifiedCache:
         """
         try:
             start_time = time.time()
-            need_size = (p.height * p.width / (512*512) - 1) * \
-                (self.size_base + self.batch_base) + 4  # not include model size
+            size_base = self.size_base_xl
+            if p.sd_model.is_sd1 or p.sd_model.is_sd2:
+                size_base = self.size_base
+
+            need_size = (p.height * p.width / (512*512) - 1) * (self.size_base + self.batch_base) + 4 # 4 is keep size
             for item in p.script_args:
                 if ("controlnet" in str(type(item)).lower() and item.enabled) or (type(item) == dict and item.get("model") is not None):
                     need_size += 0.7
@@ -307,8 +300,7 @@ class SpecifiedCache:
                 is_delete = is_delete or tmp
             if is_delete:
                 self.cuda_gc()
-            logging.info(
-                f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
+            logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
