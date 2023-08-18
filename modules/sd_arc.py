@@ -110,9 +110,9 @@ class SpecifiedCache:
         gpu_memory_size = self.get_free_cuda()
         ram_size = self.get_free_ram()
         disk_size = self.get_free_disk()
-        logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
         if shared.cmd_opts.arc:
-            logging.info("multiple-level cache enabled.")
+            logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
+            logging.info(">>>>> arc: multiple-level cache enabled <<<<<.")
 
     def get_free_cuda(self):
         sysinfo = get_memory()
@@ -211,7 +211,9 @@ class SpecifiedCache:
         del cudas
         logging.info(f"delete cache: {oldest}")
         v = self.lru.pop(oldest)
-        self.put_ram(oldest, v)
+        res = self.put_ram(oldest, v)
+        if not res:
+            v.to(device="meta")
         del oldest
         del v
         return True
@@ -309,8 +311,7 @@ class SpecifiedCache:
         gc.collect()
         devices.torch_gc()
         torch.cuda.empty_cache()
-        logging.info(
-            f"cuda garbage collect cost: {time.time()-start_time:.1f} s")
+        logging.info(f"cuda garbage collect cost: {time.time()-start_time:.1f} s")
 
     def ram_gc(self):
         start_time = time.time()
@@ -332,9 +333,10 @@ class SpecifiedCache:
                     value.to(devices.cpu)
                 self.ram[key] = value
                 logging.info(f"add ram cache: {key}")
-                return
+                return True
         del value
         del key
+        return False
 
     def is_disk_specified(self, key):
         return self.is_ram_specified(key) or self.is_gpu_specified(key)
