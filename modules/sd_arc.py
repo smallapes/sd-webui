@@ -300,7 +300,7 @@ class SpecifiedCache:
                 is_delete = is_delete or tmp
             if is_delete:
                 self.cuda_gc()
-            logging.info(f"prepare memory: {need_size:.2f} GB, time cost: {time.time() - start_time:.1f} s")
+            logging.info(f"prepare memory: {need_size:.2f} GB, free memory after release: { self.get_free_cuda():.2f}GB, time cost: {time.time() - start_time:.1f} s")
         except Exception as e:
             raise e
 
