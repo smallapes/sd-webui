@@ -19,7 +19,7 @@ use in two places via a SpecifiedCache model.
 """
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
-
+prefix = "arc"
 
 def pickle_load(filepath):
     # Define a custom find_global function
@@ -87,7 +87,7 @@ class SpecifiedCache:
         self.model_size_xl = 13 if cmd_opts.no_half else (9 if cmd_opts.no_half_vae else 7)
         self.model_size_disk = 2.2
         self.size_base = 2.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 0.5
-        self.size_base_xl = 3.5 if cmd_opts.no_half or cmd_opts.no_half_vae else 1
+        self.size_base_xl = 3. if cmd_opts.no_half or cmd_opts.no_half_vae else 1
         self.batch_base = 0.3
         self.batch_base_xl = 0.5
         self.ram_model_size = 5
@@ -111,8 +111,8 @@ class SpecifiedCache:
         ram_size = self.get_free_ram()
         disk_size = self.get_free_disk()
         if shared.cmd_opts.arc:
-            logging.info(f"gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
             logging.info(">>>>> arc: multiple-level cache enabled <<<<<.")
+            logging.info(f"{prefix}: gpu memory：{gpu_memory_size : .0f} GB, ram:{ram_size : .0f} GB，disk:{disk_size : .0f} GB")
 
     def get_free_cuda(self):
         sysinfo = get_memory()
